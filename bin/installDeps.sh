@@ -11,7 +11,7 @@ fi
 #Is wget installed?
 hash wget > /dev/null 2>&1 || { 
   echo "Please install wget" >&2
-  exit 1 
+ # exit 1 
 }
 
 #Is node installed?
@@ -33,7 +33,7 @@ if [ ! -f "settings.json" ]; then
 fi
 
 echo "Ensure that all dependencies are up to date..."
-npm install || exit 1
+#npm install || exit 1
 
 echo "Ensure jQuery is downloaded and up to date..."
 DOWNLOAD_JQUERY="true"
@@ -47,7 +47,7 @@ if [ -f "static/js/jquery.min.js" ]; then
 fi
 
 if [ $DOWNLOAD_JQUERY = "true" ]; then
-  wget -O static/js/jquery.min.js http://code.jquery.com/jquery-$NEEDED_VERSION.min.js || exit 1
+  curl -lo static/js/jquery.min.js http://code.jquery.com/jquery-$NEEDED_VERSION.min.js || exit 1
 fi
 
 #Remove all minified data to force node creating it new
