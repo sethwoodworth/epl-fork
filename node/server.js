@@ -152,6 +152,8 @@ async.waterfall([
         if(err == "notfound")
           res.send('404 - Not Found', 404);
         else
+          res.header("Access-Control-Allow-Origin", "*");
+          res.header("Access-Control-Allow-Headers", "X-Requested-With");
           res.send(html);
       });
     });
