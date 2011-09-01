@@ -149,12 +149,13 @@ async.waterfall([
         if(err && err != "notfound")
           throw err;
           
-        if(err == "notfound")
+        if(err == "notfound") {
           res.send('404 - Not Found', 404);
-        else
+	} else {
           res.header("Access-Control-Allow-Origin", "*");
           res.header("Access-Control-Allow-Headers", "X-Requested-With");
           res.send(html);
+	}
       });
     });
     
