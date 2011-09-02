@@ -395,7 +395,7 @@ async.waterfall([
       app.close();
 
       //do the db shutdown
-      db.db.doShutdown(function()
+      db.db.close(function()
       {
         console.log("db sucessfully closed.");
         
