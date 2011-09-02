@@ -3,7 +3,7 @@
  */
 
 /*
- * 2011 Peter 'Pita' Martischka
+ * 2011 Peter 'Pita' Martischka (Primary Technology Ltd)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,14 @@ var async = require("async");
 var settings = require("./Settings");
 var os = require('os');
 
+var doConvertTask;
+
 //on windows we have to spawn a process for each convertion, cause the plugin abicommand doesn't exist on this platform
 if(os.type().indexOf("Windows") > -1)
 {
   var stdoutBuffer = "";
 
-  function doConvertTask(task, callback)
+  doConvertTask = function(task, callback)
   {
     //span an abiword process to perform the conversion
     var abiword = spawn(settings.abiword, ["--to=" + task.destFile, task.srcFile]);
@@ -72,9 +74,6 @@ if(os.type().indexOf("Windows") > -1)
 //thats much faster, about factor 10
 else
 {
-  //Queue with the converts we have to do
-  var queue = async.queue(doConvertTask, 1);
-
   //spawn the abiword process
   var abiword = spawn(settings.abiword, ["--plugin", "AbiCommand"]);
 
@@ -123,7 +122,7 @@ else
     }
   }
 
-  function doConvertTask(task, callback)
+  doConvertTask = function(task, callback)
   {
     abiword.stdin.write("convert " + task.srcFile + " " + task.destFile + " " + task.type + "\n");
     
@@ -134,6 +133,9 @@ else
       task.callback(err);
     };
   }
+  
+  //Queue with the converts we have to do
+  var queue = async.queue(doConvertTask, 1);
   
   exports.convertFile = function(srcFile, destFile, type, callback)
   {	

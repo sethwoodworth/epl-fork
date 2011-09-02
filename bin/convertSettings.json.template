@@ -1,0 +1,10 @@
+{
+  "etherpad-db": 
+  {
+    "host": "localhost",
+    "port": 3306,
+    "database": "etherpad",
+    "user": "etherpaduser",
+    "password": "yourpassword"
+  }
+}

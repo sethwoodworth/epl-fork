@@ -2,12 +2,18 @@
  * The pad object, defined with joose
  */
 
+require('joose');
+
 var Changeset = require("../utils/Changeset");
 var AttributePoolFactory = require("../utils/AttributePoolFactory");
 var db = require("./DB").db;
 var async = require("async");
 var settings = require('../utils/Settings');
 var authorManager = require("./AuthorManager");
+var padManager = require("./PadManager");
+var padMessageHandler = require("../handler/PadMessageHandler");
+var readOnlyManager = require("./ReadOnlyManager");
+var crypto = require("crypto");
 
 /**
  * Copied from the Etherpad source code. It converts Windows line breaks to Unix line breaks and convert Tabs to spaces
@@ -43,6 +49,17 @@ Class('Pad', {
       is: 'rw',
       init: -1
     }, // chatHead
+    
+    publicStatus : {
+      is: 'rw',
+      init: false,
+      getterName : 'getPublicStatus'
+    }, //publicStatus
+    
+    passwordHash : {
+      is: 'rw',
+      init: null
+    }, // passwordHash
     
     id : { is : 'r' }
   },
@@ -82,7 +99,12 @@ Class('Pad', {
       }
       
       db.set("pad:"+this.id+":revs:"+newRev, newRevData);
-      db.set("pad:"+this.id, {atext: this.atext, pool: this.pool.toJsonable(), head: this.head, chatHead: this.chatHead});
+      db.set("pad:"+this.id, {atext: this.atext, 
+                              pool: this.pool.toJsonable(), 
+                              head: this.head, 
+                              chatHead: this.chatHead, 
+                              publicStatus: this.publicStatus, 
+                              passwordHash: this.passwordHash});
     }, //appendRevision
     
     getRevisionChangeset : function(revNum, callback) 
@@ -310,9 +332,15 @@ Class('Pad', {
       });
     },
     
-    init : function (callback) 
+    init : function (text, callback) 
     {    
       var _this = this;
+      
+      //replace text with default text if text isn't set
+      if(text == null)
+      {
+        text = settings.defaultPadText;
+      }
     
       //try to load the pad  
       db.get("pad:"+this.id, function(err, value)
@@ -330,22 +358,171 @@ Class('Pad', {
           _this.atext = value.atext;
           _this.pool = _this.pool.fromJsonable(value.pool);
           
+          //ensure we have a local chatHead variable
           if(value.chatHead != null)
             _this.chatHead = value.chatHead;
           else
             _this.chatHead = -1;
+            
+          //ensure we have a local publicStatus variable
+          if(value.publicStatus != null)
+            _this.publicStatus = value.publicStatus;
+          else
+            _this.publicStatus = false; 
+           
+          //ensure we have a local passwordHash variable
+          if(value.passwordHash != null)
+            _this.passwordHash = value.passwordHash;
+          else
+            _this.passwordHash = null;
         }
         //this pad doesn't exist, so create it
         else
         {
-          var firstChangeset = Changeset.makeSplice("\n", 0, 0, exports.cleanText(settings.defaultPadText));                      
+          var firstChangeset = Changeset.makeSplice("\n", 0, 0, exports.cleanText(text));                      
       
           _this.appendRevision(firstChangeset, '');
         }
         
         callback(null);
       });
-    } 
-    
+    },
+    remove: function(callback)
+    {
+      var padID = this.id;
+      var _this = this;
+      
+      //kick everyone from this pad
+      padMessageHandler.kickSessionsFromPad(padID);
+      
+      async.series([
+        //delete all relations
+        function(callback)
+        {
+          async.parallel([
+            //is it a group pad? -> delete the entry of this pad in the group
+            function(callback)
+            {
+              //is it a group pad?
+              if(padID.indexOf("$")!=-1)
+              {
+                var groupID = padID.substring(0,padID.indexOf("$"));
+                
+                db.get("group:" + groupID, function (err, group)
+                {
+                  if(err) {callback(err); return}
+                  
+                  //remove the pad entry
+                  delete group.pads[padID];
+                  
+                  //set the new value
+                  db.set("group:" + groupID, group);
+                  
+                  callback();
+                });
+              }
+              //its no group pad, nothing to do here
+              else
+              {
+                callback();
+              }
+            },
+            //remove the readonly entries
+            function(callback)
+            {
+              readOnlyManager.getReadOnlyId(padID, function(err, readonlyID)
+              {
+                if(err) {callback(err); return}
+                
+                db.remove("pad2readonly:" + padID);
+                db.remove("readonly2pad:" + readonlyID);
+                
+                callback();
+              });
+            },
+            //delete all chat messages
+            function(callback)
+            {
+              var chatHead = _this.chatHead;
+              
+              for(var i=0;i<=chatHead;i++)
+              {
+                db.remove("pad:"+padID+":chat:"+i);
+              }
+              
+              callback();
+            },
+            //delete all revisions
+            function(callback)
+            {
+              var revHead = _this.head;
+              
+              for(var i=0;i<=revHead;i++)
+              {
+                db.remove("pad:"+padID+":revs:"+i);
+              }
+              
+              callback();
+            }
+          ], callback);
+        },
+        //delete the pad entry and delete pad from padManager
+        function(callback)
+        {
+          db.remove("pad:"+padID);
+          padManager.unloadPad(padID);
+          callback();
+        }
+      ], function(err)
+      {
+        callback(err);
+      })
+    },
+    //set in db
+    setPublicStatus: function(publicStatus)
+    {
+      this.publicStatus = publicStatus;
+      db.setSub("pad:"+this.id, ["publicStatus"], this.publicStatus);
+    },
+    setPassword: function(password)
+    {
+      this.passwordHash = password == null ? null : hash(password, generateSalt());
+      db.setSub("pad:"+this.id, ["passwordHash"], this.passwordHash);
+    }, 
+    isCorrectPassword: function(password)
+    {
+      return compare(this.passwordHash, password)
+    }, 
+    isPasswordProtected: function()
+    {
+      return this.passwordHash != null;
+    }
   }, // methods
 });
+
+/* Crypto helper methods */
+
+function hash(password, salt)
+{
+  var shasum = crypto.createHash('sha512');
+  shasum.update(password + salt);
+  return shasum.digest("hex") + "$" + salt;
+}
+
+function generateSalt()
+{
+  var len = 86;
+  var chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz./";
+  var randomstring = '';
+  for (var i = 0; i < len; i++)
+  {
+    var rnum = Math.floor(Math.random() * chars.length);
+    randomstring += chars.substring(rnum, rnum + 1);
+  }
+  return randomstring;
+}
+
+function compare(hashStr, password)
+{
+  return hash(password, hashStr.split("$")[1]) === hashStr;  
+}

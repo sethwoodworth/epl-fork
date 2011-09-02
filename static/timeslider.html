@@ -105,17 +105,26 @@
       {
         changesetLoader.handleSocketResponse(message);
       }
+      else if(message.accessStatus)
+      {
+        $("body").html("<h2>You have no permission to access this pad</h2>")
+      }
     });
   });
   
   //sends a message over the socket
   function sendSocketMsg(type, data)
   {
+    var sessionID = readCookie("sessionID");
+    var password = readCookie("password");
+    
     var msg = { "component" : "timeslider",
                 "type": type,
                 "data": data, 
                 "padId": padId,
                 "token": token,
+                "sessionID": sessionID,
+                "password": password,
                 "protocolVersion": 2};
     
     socket.json.send(msg);
@@ -225,10 +234,6 @@
         </div>
 
         <div id="steppers">
-          <div class="stepper" id="leftstar"></div>
-
-          <div class="stepper" id="rightstar"></div>
-
           <div class="stepper" id="leftstep"></div>
 
           <div class="stepper" id="rightstep"></div>
@@ -266,7 +271,7 @@
               <!-- termporary place holder--> 
               <a id = "returnbutton">Return to pad</a>
               <script>
-                $("#returnbutton").attr("href", document.location.href.substring(0,document.location.href.lastIndexOf('/timeslider')));
+                $("#returnbutton").attr("href", document.referrer);
               </script>
             </div>
 

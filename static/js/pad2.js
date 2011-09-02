@@ -1,5 +1,5 @@
 /**
- * Copyright 2009 Google Inc., 2011 Peter 'Pita' Martischka
+ * Copyright 2009 Google Inc., 2011 Peter 'Pita' Martischka (Primary Technology Ltd)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,15 @@
 /* global $, window */
 
 var socket;
+var LineNumbersDisabled = false;
+var useMonospaceFontGlobal = false;
+var globalUserName = false;
 
 $(document).ready(function()
 {
-  //test if the url is proper, means without any ? or # that doesn't belong to a url
-  //if it isn't proper, clean the url a do a redirect
-  var padId = document.location.pathname.substring(document.location.pathname.lastIndexOf("/") + 1);  
-  var expectedURL = document.location.href.substring(0,document.location.href.lastIndexOf("/") ) + "/" + padId;
-  if(expectedURL != document.location.href)
-  {
-    document.location = expectedURL;
-  }
-
   //start the costum js
   if(typeof costumStart == "function") costumStart();
-
+  getParams();
   handshake();
 });
 
@@ -40,7 +34,7 @@ $(window).unload(function()
   pad.dispose();
 });
 
-function createCookie(name, value, days)
+function createCookie(name, value, days, path)
 {
   if (days)
   {
@@ -49,7 +43,11 @@ function createCookie(name, value, days)
     var expires = "; expires=" + date.toGMTString();
   }
   else var expires = "";
-  document.cookie = name + "=" + value + expires + "; path=/";
+  
+  if(!path)
+    path = "/";
+  
+  document.cookie = name + "=" + value + expires + "; path=" + path;
 }
 
 function readCookie(name)
@@ -78,6 +76,75 @@ function randomString()
   return "t." + randomstring;
 }
 
+function getParams()
+{
+  var showControls = getUrlVars()["showControls"];
+  var showChat = getUrlVars()["showChat"];
+  var userName = getUrlVars()["userName"];
+  var showLineNumbers = getUrlVars()["showLineNumbers"];
+  var useMonospaceFont = getUrlVars()["useMonospaceFont"];
+  if(showControls)
+  {
+    if(showControls == "false")
+    { 
+      $('#editbar').hide();
+      $('#editorcontainer').css({"top":"0px"});
+    }
+  }
+
+  if(showChat)
+  {
+    if(showChat == "false")
+    {
+      $('#chaticon').hide();
+    }
+  }
+
+  if(showLineNumbers)
+  {
+    if(showLineNumbers == "false")
+    {
+      LineNumbersDisabled = true;
+    }
+  }
+
+  if(useMonospaceFont)
+  {
+    if(useMonospaceFont == "true")
+    {
+      useMonospaceFontGlobal = true;
+    }
+  }
+
+
+  if(userName)
+  {
+    // If the username is set as a parameter we should set a global value that we can call once we have initiated the pad.
+    globalUserName = userName;
+  }
+}
+
+function getUrlVars()
+{
+  var vars = [], hash;
+  var hashes = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+  for(var i = 0; i < hashes.length; i++)
+  {
+    hash = hashes[i].split('=');
+    vars.push(hash[0]);
+    vars[hash[0]] = hash[1];
+  }
+  return vars;
+}
+
+function savePassword()
+{
+  //set the password cookie
+  createCookie("password",$("#passwordinput").val(),null,document.location.pathname);
+  //reload
+  document.location=document.location;
+}
+
 function handshake()
 {
   var loc = document.location;
@@ -95,7 +162,8 @@ function handshake()
   socket.once('connect', function()
   {
     var padId = document.location.pathname.substring(document.location.pathname.lastIndexOf("/") + 1);
-    
+    padId = unescape(padId); // unescape neccesary due to Safari and Opera interpretation of spaces
+
     document.title = document.title + " | " + padId;
 
     var token = readCookie("token");
@@ -104,15 +172,19 @@ function handshake()
       token = randomString();
       createCookie("token", token, 60);
     }
+    
+    var sessionID = readCookie("sessionID");
+    var password = readCookie("password");
 
     var msg = {
       "component": "pad",
       "type": "CLIENT_READY",
       "padId": padId,
+      "sessionID": sessionID,
+      "password": password,
       "token": token,
       "protocolVersion": 2
     };
-
     socket.json.send(msg);
   });
 
@@ -121,28 +193,69 @@ function handshake()
 
   socket.on('message', function(obj)
   {
-    //if we haven't recieved the clientVars yet, then this message should it be
-    if (!receivedClientVars)
+    //the access was not granted, give the user a message
+    if(!receivedClientVars && obj.accessStatus)
     {
+      if(obj.accessStatus == "deny")
+      {
+        $("#editorloadingbox").html("<b>You do not have permission to access this pad</b>");
+      }
+      else if(obj.accessStatus == "needPassword")
+      {
+        $("#editorloadingbox").html("<b>You need a password to access this pad</b><br>" +
+                                    "<input id='passwordinput' type='password' name='password'>"+
+                                    "<button type='button' onclick='savePassword()'>ok</button>");
+      }
+      else if(obj.accessStatus == "wrongPassword")
+      {
+        $("#editorloadingbox").html("<b>You're password was wrong</b><br>" +
+                                    "<input id='passwordinput' type='password' name='password'>"+
+                                    "<button type='button' onclick='savePassword()'>ok</button>");
+      }
+    }
+    
+    //if we haven't recieved the clientVars yet, then this message should it be
+    else if (!receivedClientVars)
+    {
+      //log the message
       if (window.console) console.log(obj);
 
       receivedClientVars = true;
 
+      //set some client vars
       clientVars = obj;
       clientVars.userAgent = "Anonymous";
       clientVars.collab_client_vars.clientAgent = "Anonymous";
 
+      //initalize the pad
       pad.init();
-
       initalized = true;
+
+      // If the LineNumbersDisabled value is set to true then we need to hide the Line Numbers
+      if (LineNumbersDisabled == true)
+      {
+        pad.changeViewOption('showLineNumbers', false);
+      }
+      // If the Monospacefont value is set to true then change it to monospace.
+      if (useMonospaceFontGlobal == true)
+      {
+        pad.changeViewOption('useMonospaceFont', true);
+      }
+      // if the globalUserName value is set we need to tell the server and the client about the new authorname
+      if (globalUserName !== false)
+      {
+        pad.notifyChangeName(globalUserName); // Notifies the server
+        $('#myusernameedit').attr({"value":globalUserName}); // Updates the current users UI
+      }
     }
     //This handles every Message after the clientVars
     else
     {
+      //this message advices the client to disconnect
       if (obj.disconnect)
       {
+        padconnectionstatus.disconnected(obj.disconnect);
         socket.disconnect();
-        padconnectionstatus.disconnected("userdup");
         return;
       }
       else
@@ -151,6 +264,9 @@ function handshake()
       }
     }
   });
+
+  // Bind the colorpicker
+  var fb = $('#colorpicker').farbtastic({ callback: '#mycolorpickerpreview', width: 220});
 }
 
 var pad = {
@@ -250,6 +366,7 @@ var pad = {
       colorId: clientVars.userColor,
       userAgent: pad.getDisplayUserAgent()
     };
+
     if (clientVars.specialKey)
     {
       pad.myUserInfo.specialKey = clientVars.specialKey;
@@ -348,12 +465,16 @@ var pad = {
     };
     options.view[key] = value;
     pad.handleOptionsChange(options);
-    pad.collabClient.sendClientMessage(
+    // if the request isn't to hide line numbers then broadcast this to other users
+    if (key != "showLineNumbers" && key != "useMonospaceFont")
     {
-      type: 'padoptions',
-      options: options,
-      changedBy: pad.myUserInfo.name || "unnamed"
-    });
+      pad.collabClient.sendClientMessage(
+      {
+        type: 'padoptions',
+        options: options,
+        changedBy: pad.myUserInfo.name || "unnamed"
+      });
+    }
   },
   handleOptionsChange: function(opts)
   {
@@ -669,7 +790,7 @@ var pad = {
   },
   preloadImages: function()
   {
-    var images = ['../static/img/colorpicker.gif'];
+    var images = []; // Removed as we now use CSS and JS for colorpicker
 
     function loadNextImage()
     {

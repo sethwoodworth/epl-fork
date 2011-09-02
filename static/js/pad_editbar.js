@@ -100,8 +100,8 @@ var padeditbar = (function()
         }
         else if (cmd == 'embed')
         {  
-          var padurl = document.location;
-          $('#embedinput').val("<iframe src='" + padurl + "' width=600 height=400>");
+          var padurl = window.location.href.split("?")[0];
+          $('#embedinput').val("<iframe src='" + padurl + "?showControls=true&showChat=true&showLineNumbers=true&useMonospaceFont=false' width=600 height=400>");
           self.toogleDropDown("embed");
           $('#embedinput').focus().select();
         }
@@ -114,6 +114,7 @@ var padeditbar = (function()
         {
           var basePath = document.location.href.substring(0, document.location.href.indexOf("/p/"));
           var readonlyLink = basePath + "/ro/" + clientVars.readOnlyId;
+          $('#readonlyImage').attr("src","https://chart.googleapis.com/chart?chs=200x200&cht=qr&chld=H|0&chl=" + readonlyLink);
           $('#readonlyInput').val(readonlyLink);
           self.toogleDropDown("readonly");
           $('#readonlyInput').focus().select();
@@ -170,6 +171,10 @@ var padeditbar = (function()
       {
         for(var i=0;i<modules.length;i++)
         {
+          //skip the userlist
+          if(modules[i] == "users")
+            continue;
+          
           var module = $("#" + modules[i]);
         
           if(module.css('display') != "none")

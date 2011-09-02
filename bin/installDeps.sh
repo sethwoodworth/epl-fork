@@ -9,9 +9,9 @@ if [ -d "../bin" ]; then
 fi
 
 #Is wget installed?
-hash wget > /dev/null 2>&1 || { 
-  echo "Please install wget" >&2
- # exit 1 
+hash curl > /dev/null 2>&1 || { 
+  echo "Please install curl" >&2
+  exit 1 
 }
 
 #Is node installed?
@@ -20,11 +20,25 @@ hash node > /dev/null 2>&1 || {
   exit 1 
 }
 
+#check node version
+NODE_VERSION=$(node --version)
+if [ ! $(echo $NODE_VERSION | cut -d "." -f 1-2) = "v0.4" ]; then
+  echo "You're running a wrong version of node, you're using $NODE_VERSION, we need v0.4.x" >&2
+  exit 1 
+fi
+
 #Is npm installed?
 hash npm > /dev/null 2>&1 || { 
   echo "Please install npm ( http://npmjs.org )" >&2
   exit 1 
 }
+
+#check npm version
+NPM_VERSION=$(npm --version)
+if [ ! $(echo $NPM_VERSION | cut -d "." -f 1-2) = "1.0" ]; then
+  echo "You're running a wrong version of npm, you're using $NPM_VERSION, we need 1.0.x" >&2
+  exit 1 
+fi
 
 #Does a settings.json exist? if no copy the template
 if [ ! -f "settings.json" ]; then
@@ -33,7 +47,10 @@ if [ ! -f "settings.json" ]; then
 fi
 
 echo "Ensure that all dependencies are up to date..."
-#npm install || exit 1
+npm install || { 
+  rm -rf node_modules
+  exit 1 
+}
 
 echo "Ensure jQuery is downloaded and up to date..."
 DOWNLOAD_JQUERY="true"

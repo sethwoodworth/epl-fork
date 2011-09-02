@@ -3,7 +3,7 @@
  */ 
 
 /*
- * Copyright 2009 Google Inc., 2011 Peter 'Pita' Martischka
+ * Copyright 2009 Google Inc., 2011 Peter 'Pita' Martischka (Primary Technology Ltd)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,10 @@ var AttributePoolFactory = require("../utils/AttributePoolFactory");
 var authorManager = require("../db/AuthorManager");
 var readOnlyManager = require("../db/ReadOnlyManager");
 var settings = require('../utils/Settings');
+var securityManager = require("../db/SecurityManager");
+var log4js = require('log4js');
+var os = require("os");
+var messageLogger = log4js.getLogger("message");
 
 /**
  * A associative array that translates a session to a pad
@@ -63,13 +67,27 @@ exports.setSocketIO = function(socket_io)
  * @param client the new client
  */
 exports.handleConnect = function(client)
-{
-  //check if all ok
-  throwExceptionIfClientOrIOisInvalid(client);
-  
+{  
   //Initalize session2pad and sessioninfos for this new session
   session2pad[client.id]=null;  
   sessioninfos[client.id]={};
+}
+
+/**
+ * Kicks all sessions from a pad
+ * @param client the new client
+ */
+exports.kickSessionsFromPad = function(padID)
+{
+  //skip if there is nobody on this pad
+  if(!pad2sessions[padID])
+    return;
+
+  //disconnect everyone from this pad
+  for(var i in pad2sessions[padID])
+  {
+    socketio.sockets.sockets[pad2sessions[padID][i]].json.send({disconnect:"deleted"});
+  }
 }
 
 /**
@@ -77,10 +95,7 @@ exports.handleConnect = function(client)
  * @param client the client that leaves
  */
 exports.handleDisconnect = function(client)
-{
-  //check if all ok
-  throwExceptionIfClientOrIOisInvalid(client);
-  
+{  
   //save the padname of this session
   var sessionPad=session2pad[client.id];
   
@@ -138,16 +153,15 @@ exports.handleDisconnect = function(client)
  */
 exports.handleMessage = function(client, message)
 { 
-  //check if all ok
-  throwExceptionIfClientOrIOisInvalid(client);
-  
   if(message == null)
   {
-    throw "Message is null!";
+    messageLogger.warn("Message is null!");
+    return;
   }
   if(!message.type)
   {
-    throw "Message has no type attribute!";
+    messageLogger.warn("Message has no type attribute!");
+    return;
   }
   
   //Check what type of message we get and delegate to the other methodes
@@ -179,7 +193,7 @@ exports.handleMessage = function(client, message)
   //if the message type is unkown, throw an exception
   else
   {
-    throw "unkown Message Type: '" + message.type + "'";
+    messageLogger.warn("Droped message, unkown Message Type " + message.type);
   }
 }
 
@@ -258,11 +272,13 @@ function handleSuggestUserName(client, message)
   //check if all ok
   if(message.data.payload.newName == null)
   {
-    throw "suggestUserName Message has no newName!";
+    messageLogger.warn("Droped message, suggestUserName Message has no newName!");
+    return;
   }
   if(message.data.payload.unnamedId == null)
   {
-    throw "suggestUserName Message has no unnamedId!";
+    messageLogger.warn("Droped message, suggestUserName Message has no unnamedId!");
+    return;
   }
   
   var padId = session2pad[client.id];
@@ -288,7 +304,8 @@ function handleUserInfoUpdate(client, message)
   //check if all ok
   if(message.data.userInfo.colorId == null)
   {
-    throw "USERINFO_UPDATE Message has no colorId!";
+    messageLogger.warn("Droped message, USERINFO_UPDATE Message has no colorId!");
+    return;
   }
   
   //Find out the author name of this session
@@ -331,15 +348,18 @@ function handleUserChanges(client, message)
   //check if all ok
   if(message.data.baseRev == null)
   {
-    throw "USER_CHANGES Message has no baseRev!";
+    messageLogger.warn("Droped message, USER_CHANGES Message has no baseRev!");
+    return;
   }
   if(message.data.apool == null)
   {
-    throw "USER_CHANGES Message has no apool!";
+    messageLogger.warn("Droped message, USER_CHANGES Message has no apool!");
+    return;
   }
   if(message.data.changeset == null)
   {
-    throw "USER_CHANGES Message has no changeset!";
+    messageLogger.warn("Droped message, USER_CHANGES Message has no changeset!");
+    return;
   }
   
   //get all Vars we need
@@ -365,12 +385,24 @@ function handleUserChanges(client, message)
       //ex. _checkChangesetAndPool
   
       //Copied from Etherpad, don't know what it does exactly
-      Changeset.checkRep(changeset);
-      Changeset.eachAttribNumber(changeset, function(n) {
-        if (! wireApool.getAttrib(n)) {
-          throw "Attribute pool is missing attribute "+n+" for changeset "+changeset;
-        }
-      });
+      try
+      {
+        //this looks like a changeset check, it throws errors sometimes
+        Changeset.checkRep(changeset);
+      
+        Changeset.eachAttribNumber(changeset, function(n) {
+          if (! wireApool.getAttrib(n)) {
+            throw "Attribute pool is missing attribute "+n+" for changeset "+changeset;
+          }
+        });
+      }
+      //there is an error in this changeset, so just refuse it
+      catch(e)
+      {
+        console.warn("Can't apply USER_CHANGES "+changeset+", cause it faild checkRep");
+        client.json.send({disconnect:"badChangeset"});
+        return;
+      }
         
       //ex. adoptChangesetAttribs
         
@@ -443,6 +475,13 @@ function handleUserChanges(client, message)
 
 exports.updatePadClients = function(pad, callback)
 {       
+  //skip this step if noone is on this pad
+  if(!pad2sessions[pad.id])
+  {
+    callback();
+    return;
+  }
+  
   //go trough all sessions on this pad
   async.forEach(pad2sessions[pad.id], function(session, callback)
   {
@@ -561,19 +600,23 @@ function handleClientReady(client, message)
   //check if all ok
   if(!message.token)
   {
-    throw "CLIENT_READY Message has no token!";
+    messageLogger.warn("Droped message, CLIENT_READY Message has no token!");
+    return;
   }
   if(!message.padId)
   {
-    throw "CLIENT_READY Message has no padId!";
+    messageLogger.warn("Droped message, CLIENT_READY Message has no padId!");
+    return;
   }
   if(!message.protocolVersion)
   {
-    throw "CLIENT_READY Message has no protocolVersion!";
+    messageLogger.warn("Droped message, CLIENT_READY Message has no protocolVersion!");
+    return;
   }
   if(message.protocolVersion != 2)
   {
-    throw "CLIENT_READY Message has a unkown protocolVersion '" + message.protocolVersion + "'!";
+    messageLogger.warn("Droped message, CLIENT_READY Message has a unkown protocolVersion '" + message.protocolVersion + "'!");
+    return;
   }
 
   var author;
@@ -585,51 +628,65 @@ function handleClientReady(client, message)
   var chatMessages;
 
   async.series([
+    //check permissions
+    function(callback)
+    {
+      securityManager.checkAccess (message.padId, message.sessionID, message.token, message.password, function(err, statusObject)
+      {
+        if(err) {callback(err); return}
+        
+        //access was granted
+        if(statusObject.accessStatus == "grant")
+        {
+          author = statusObject.authorID;
+          callback();
+        }
+        //no access, send the client a message that tell him why
+        else
+        {
+          client.json.send({accessStatus: statusObject.accessStatus})
+        }
+      });
+    }, 
     //get all authordata of this new user
     function(callback)
     {
-      //Ask the author Manager for a author of this token. 
-      authorManager.getAuthor4Token(message.token, function(err,value)
-      {
-        author = value;
-        
-        async.parallel([
-          //get colorId
-          function(callback)
+      async.parallel([
+        //get colorId
+        function(callback)
+        {
+          authorManager.getAuthorColorId(author, function(err, value)
           {
-            authorManager.getAuthorColorId(author, function(err, value)
-            {
-              authorColorId = value;
-              callback(err);
-            });
-          },
-          //get author name
-          function(callback)
+            authorColorId = value;
+            callback(err);
+          });
+        },
+        //get author name
+        function(callback)
+        {
+          authorManager.getAuthorName(author, function(err, value)
           {
-            authorManager.getAuthorName(author, function(err, value)
-            {
-              authorName = value;
-              callback(err);
-            });
-          },
-          function(callback)
+            authorName = value;
+            callback(err);
+          });
+        },
+        function(callback)
+        {
+          padManager.getPad(message.padId, function(err, value)
           {
-            padManager.getPad(message.padId, function(err, value)
-            {
-              pad = value;
-              callback(err);
-            });
-          },
-          function(callback)
+            pad = value;
+            callback(err);
+          });
+        },
+        function(callback)
+        {
+          readOnlyManager.getReadOnlyId(message.padId, function(err, value)
           {
-            readOnlyManager.getReadOnlyId(message.padId, function(err, value)
-            {
-              readOnlyId = value;
-              callback(err);
-            });
-          }
-        ], callback);
-      });
+            readOnlyId = value;
+            callback(err);
+          });
+        }
+      ], callback);
     },
     //these db requests all need the pad object
     function(callback)
@@ -653,7 +710,7 @@ function handleClientReady(client, message)
         //get the latest chat messages
         function(callback)
         {
-          pad.getLastChatMessages(20, function(err, _chatMessages)
+          pad.getLastChatMessages(100, function(err, _chatMessages)
           {
             chatMessages = _chatMessages;
             callback(err);
@@ -672,7 +729,7 @@ function handleClientReady(client, message)
         {
           if(sessioninfos[pad2sessions[message.padId][i]].author == author)
           {
-            socketio.sockets.sockets[pad2sessions[message.padId][i]].json.send({disconnect:"doublelogin"});
+            socketio.sockets.sockets[pad2sessions[message.padId][i]].json.send({disconnect:"userdup"});
           }
         }
       }
@@ -696,6 +753,13 @@ function handleClientReady(client, message)
       var apool = attribsForWire.pool.toJsonable();
       atext.attribs = attribsForWire.translated;
       
+      //check if abiword is avaiable
+      var abiwordAvailable = settings.abiword != null ? "yes" : "no";
+      if(settings.abiword != null && os.type().indexOf("Windows") != -1)
+      {
+        abiwordAvailable = "withoutPDF";
+      }
+      
       var clientVars = {
         "accountPrivs": {
             "maxRevisions": 100
@@ -714,7 +778,7 @@ function handleClientReady(client, message)
             "rev": pad.getHeadRevisionNumber(),
             "globalPadId": message.padId
         },
-        "colorPalette": ["#ffc7c7", "#fff1c7", "#e3ffc7", "#c7ffd5", "#c7ffff", "#c7d5ff", "#e3c7ff", "#ffc7f1", "#ff8f8f", "#ffe38f", "#c7ff8f", "#8fffab", "#8fffff", "#8fabff", "#c78fff", "#ff8fe3", "#d97979", "#d9c179", "#a9d979", "#79d991", "#79d9d9", "#7991d9", "#a979d9", "#d979c1", "#d9a9a9", "#d9cda9", "#c1d9a9", "#a9d9b5", "#a9d9d9", "#a9b5d9", "#c1a9d9", "#d9a9cd"],
+        "colorPalette": ["#ffc7c7", "#fff1c7", "#e3ffc7", "#c7ffd5", "#c7ffff", "#c7d5ff", "#e3c7ff", "#ffc7f1", "#ff8f8f", "#ffe38f", "#c7ff8f", "#8fffab", "#8fffff", "#8fabff", "#c78fff", "#ff8fe3", "#d97979", "#d9c179", "#a9d979", "#79d991", "#79d9d9", "#7991d9", "#a979d9", "#d979c1", "#d9a9a9", "#d9cda9", "#c1d9a9", "#a9d9b5", "#a9d9d9", "#a9b5d9", "#c1a9d9", "#d9a9cd", "#4c9c82", "#12d1ad", "#2d8e80", "#7485c3", "#a091c7", "#3185ab", "#6818b4", "#e6e76d", "#a42c64", "#f386e5", "#4ecc0c", "#c0c236", "#693224", "#b5de6a", "#9b88fd", "#358f9b", "#496d2f", "#e267fe", "#d23056", "#1a1a64", "#5aa335", "#d722bb", "#86dc6c", "#b5a714", "#955b6a", "#9f2985", "#4b81c8", "#3d6a5b", "#434e16", "#d16084", "#af6a0e", "#8c8bd8"],
         "clientIp": "127.0.0.1",
         "userIsGuest": true,
         "userColor": authorColorId,
@@ -732,7 +796,7 @@ function handleClientReady(client, message)
             "fullWidth": false,
             "hideSidebar": false
         },
-        "abiwordAvailable": settings.abiword != null, 
+        "abiwordAvailable": abiwordAvailable, 
         "hooks": {}
       }
       
@@ -829,19 +893,4 @@ function handleClientReady(client, message)
   {
     if(err) throw err;
   });
-}
-
-/**
- * A internal function that simply checks if client or socketio is null and throws a exception if yes
- */
-function throwExceptionIfClientOrIOisInvalid(client)
-{
-  if(client == null)
-  {
-    throw "Client is null!";
-  }
-  if(socketio == null)
-  {
-    throw "SocketIO is not set or null! Please use setSocketIO(io) to set it";
-  }
 }

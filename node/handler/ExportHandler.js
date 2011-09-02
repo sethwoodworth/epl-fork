@@ -3,7 +3,7 @@
  */
 
 /*
- * 2011 Peter 'Pita' Martischka
+ * 2011 Peter 'Pita' Martischka (Primary Technology Ltd)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ var tempDirectory = "/tmp";
 //tempDirectory changes if the operating system is windows 
 if(os.type().indexOf("Windows") > -1)
 {
-  tempDirectory = "c:\\Temp";
+  tempDirectory = process.env.TEMP;
 }
   
 /**

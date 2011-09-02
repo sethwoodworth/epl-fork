@@ -130,7 +130,7 @@ div #timeslider div#steppers div#rightstar {
 div #timeslider div#steppers div#leftstep {
   position: absolute;
   right: 34px;
-  top: 33px;
+  top: 20px;
   width:30px;
   height:21px;
   background: url(../../static/img/stepper_buttons.png) 0px 22px;
@@ -140,7 +140,7 @@ div #timeslider div#steppers div#leftstep {
 div #timeslider div#steppers div#rightstep {
   position: absolute;
   right: 5px;
-  top: 33px;
+  top: 20px;
   width:29px;
   height:21px;
   background: url(../../static/img/stepper_buttons.png) 29px 22px;
@@ -192,5 +192,27 @@ float:right;
   line-height: 29px;
   margin-top: 0;
   padding-right: 6pt;
+  color: #222;
 }
+
+ul { margin-left: 1.5em; }
+ul ul { margin-left: 0 !important; }
+ul.list-bullet1 { margin-left: 1.5em; }
+ul.list-bullet2 { margin-left: 3em; }
+ul.list-bullet3 { margin-left: 4.5em; }
+ul.list-bullet4 { margin-left: 6em; }
+ul.list-bullet5 { margin-left: 7.5em; }
+ul.list-bullet6 { margin-left: 9em; }
+ul.list-bullet7 { margin-left: 10.5em; }
+ul.list-bullet8 { margin-left: 12em; }
+
+ul { list-style-type: disc; }
+ul.list-bullet1 { list-style-type: disc; }
+ul.list-bullet2 { list-style-type: circle; }
+ul.list-bullet3 { list-style-type: square; }
+ul.list-bullet4 { list-style-type: disc; }
+ul.list-bullet5 { list-style-type: circle; }
+ul.list-bullet6 { list-style-type: square; }
+ul.list-bullet7 { list-style-type: disc; }
+ul.list-bullet8 { list-style-type: circle; }
 

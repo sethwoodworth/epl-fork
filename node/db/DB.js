@@ -4,7 +4,7 @@
  */
 
 /*
- * 2011 Peter 'Pita' Martischka
+ * 2011 Peter 'Pita' Martischka (Primary Technology Ltd)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,9 +21,10 @@
 
 var ueberDB = require("ueberDB");
 var settings = require("../utils/Settings");
+var log4js = require('log4js');
 
 //set database settings
-var db = new ueberDB.database(settings.dbType, settings.dbSettings);
+var db = new ueberDB.database(settings.dbType, settings.dbSettings, null, log4js.getLogger("ueberDB"));
 
 /**
  * The UeberDB Object that provides the database functions

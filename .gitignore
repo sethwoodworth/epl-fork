@@ -1,3 +1,9 @@
 node_modules
 settings.json
 static/js/jquery.min.js
+APIKEY.txt
+bin/abiword.exe
+bin/node.exe
+etherpad-lite-win.zip
+var/dirty.db
+bin/convertSettings.json

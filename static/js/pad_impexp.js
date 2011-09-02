@@ -231,12 +231,12 @@ var padimpexp = (function()
     init: function()
     {
       // build the export links
-      $("#exporthtmla").attr("href", document.location.href + "/export/html");
-      $("#exportplaina").attr("href", document.location.href + "/export/txt");
-      $("#exportwordlea").attr("href", document.location.href + "/export/wordle");
+      $("#exporthtmla").attr("href", document.location.pathname + "/export/html");
+      $("#exportplaina").attr("href", document.location.pathname + "/export/txt");
+      $("#exportwordlea").attr("href", document.location.pathname + "/export/wordle");
       
       //hide stuff thats not avaible if abiword is disabled
-      if(!clientVars.abiwordAvailable)
+      if(clientVars.abiwordAvailable == "no")
       {
         $("#exportworda").remove();
         $("#exportpdfa").remove();
@@ -245,13 +245,25 @@ var padimpexp = (function()
         $("#importexportline").css({"height":"95px"});
         $("#import").html("Import is not available");
       }
-      else
+      else if(clientVars.abiwordAvailable == "withoutPDF")
       {
-        $("#exportworda").attr("href", document.location.href + "/export/doc");
-        $("#exportpdfa").attr("href", document.location.href + "/export/pdf");
-        $("#exportopena").attr("href", document.location.href + "/export/odt");
+        $("#exportpdfa").remove();
+        
+        $("#exportworda").attr("href", document.location.pathname + "/export/doc");
+        $("#exportopena").attr("href", document.location.pathname + "/export/odt");
+        
+        $("#importexport").css({"height":"142px"});
+        $("#importexportline").css({"height":"142px"});
         
         $("#importform").get(0).setAttribute('action', document.location.href + "/import"); 
+      }
+      else
+      {
+        $("#exportworda").attr("href", document.location.pathname + "/export/doc");
+        $("#exportpdfa").attr("href", document.location.pathname + "/export/pdf");
+        $("#exportopena").attr("href", document.location.pathname + "/export/odt");
+        
+        $("#importform").get(0).setAttribute('action', document.location.pathname + "/import"); 
       }
     
       $("#impexp-close").click(function()

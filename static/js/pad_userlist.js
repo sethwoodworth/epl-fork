@@ -499,6 +499,12 @@ var paduserlist = (function()
     },
     setMyUserInfo: function(info)
     {
+      //translate the colorId
+      if(typeof info.colorId == "number")
+      {
+        info.colorId = clientVars.colorPalette[info.colorId];
+      }
+      
       myUserInfo = $.extend(
       {}, info);
 
@@ -513,7 +519,7 @@ var paduserlist = (function()
       }
 
       var userData = {};
-      userData.color = pad.getColorPalette()[info.colorId];
+      userData.color = typeof info.colorId == "number" ? clientVars.colorPalette[info.colorId] : info.colorId;
       userData.name = info.name;
       userData.status = '';
       userData.activity = '';
@@ -703,7 +709,8 @@ var paduserlist = (function()
       {
         $("#myswatchbox").addClass('myswatchboxhoverable').removeClass('myswatchboxunhoverable');
       }
-      $("#myswatch").css('background', pad.getColorPalette()[myUserInfo.colorId]);
+      
+      $("#myswatch").css({'background-color': myUserInfo.colorId});
     }
   };
   return self;
@@ -718,20 +725,25 @@ function getColorPickerSwatchIndex(jnode)
 function closeColorPicker(accept)
 {
   if (accept)
-  {
-    var newColorId = getColorPickerSwatchIndex($("#colorpickerswatches .picked"));
-    if (newColorId >= 0)
-    { // fails on NaN
-      myUserInfo.colorId = newColorId;
-      pad.notifyChangeColor(newColorId);
+  {    
+    var newColor = $("#mycolorpickerpreview").css("background-color");
+    var parts = newColor.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+    // parts now should be ["rgb(0, 70, 255", "0", "70", "255"]
+    delete (parts[0]);
+    for (var i = 1; i <= 3; ++i) {
+        parts[i] = parseInt(parts[i]).toString(16);
+        if (parts[i].length == 1) parts[i] = '0' + parts[i];
     }
-
+    var newColor = "#" +parts.join(''); // "0070ff"
+    
+    myUserInfo.colorId = newColor;
+    pad.notifyChangeColor(newColor);
     paduserlist.renderMyUserInfo();
   }
   else
   {
-    pad.notifyChangeColor(previousColorId);
-    paduserlist.renderMyUserInfo();
+    //pad.notifyChangeColor(previousColorId);
+    //paduserlist.renderMyUserInfo();
   }
 
   colorPickerOpen = false;

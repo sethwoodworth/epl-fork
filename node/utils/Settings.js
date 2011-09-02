@@ -4,7 +4,7 @@
  */
 
 /*
- * 2011 Peter 'Pita' Martischka
+ * 2011 Peter 'Pita' Martischka (Primary Technology Ltd)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,11 +33,11 @@ exports.port = 9001;
 /*
  * The Type of the database
  */
-exports.dbType = "sqlite";
+exports.dbType = "dirty";
 /**
  * This setting is passed with dbType to ueberDB to set up the database
  */
-exports.dbSettings = { "filename" : "../var/sqlite.db" };
+exports.dbSettings = { "filename" : "../var/dirty.db" };
 /**
  * The default Text of a new pad
  */
@@ -51,6 +51,11 @@ exports.minify = true;
  * The path of the abiword executable
  */
 exports.abiword = null;
+
+/**
+ * The log level of log4js
+ */
+exports.loglevel = "INFO";
 
 //read the settings sync
 var settingsStr = fs.readFileSync("../settings.json").toString();
@@ -77,7 +82,7 @@ for(var i in settings)
   //test if the setting start with a low character
   if(i.charAt(0).search("[a-z]") !== 0)
   {
-    console.error("WARNING: Settings should start with a low character: '" + i + "'");
+    console.warn("Settings should start with a low character: '" + i + "'");
   }
 
   //we know this setting, so we overwrite it
@@ -88,7 +93,7 @@ for(var i in settings)
   //this setting is unkown, output a warning and throw it away
   else
   {
-    console.error("WARNING: Unkown Setting: '" + i + "'");
-    console.error("This setting doesn't exist or it was removed");
+    console.warn("Unkown Setting: '" + i + "'");
+    console.warn("This setting doesn't exist or it was removed");
   }
 }
