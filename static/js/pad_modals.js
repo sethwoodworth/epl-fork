@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +19,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+var padutils = require('/pad_utils').padutils;
+var paddocbar = require('/pad_docbar').paddocbar;
 
 var padmodals = (function()
 {
@@ -64,9 +73,12 @@ var padmodals = (function()
     clearShareBoxTo();
   }
 
+  var pad = undefined;
   var self = {
     init: function()
     {
+      pad = require('/pad2').pad; // Sidestep circular dependency (should be injected).
+
       self.initFeedback();
       self.initShareBox();
     },
@@ -358,3 +370,5 @@ var padmodals = (function()
   };
   return self;
 }());
+
+exports.padmodals = padmodals;

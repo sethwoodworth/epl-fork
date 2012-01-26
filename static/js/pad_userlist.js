@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +19,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+var padutils = require('/pad_utils').padutils;
 
 var myUserInfo = {};
 
@@ -454,9 +462,12 @@ var paduserlist = (function()
     return true;
   }, 1000);
 
+  var pad = undefined;
   var self = {
     init: function(myInitialUserInfo)
     {
+      pad = require('/pad2').pad; // Sidestep circular dependency (should be injected).
+
       self.setMyUserInfo(myInitialUserInfo);
 
       $("#otheruserstable tr").remove();
@@ -646,7 +657,7 @@ var paduserlist = (function()
       if (box.length == 0)
       {
         // make guest prompt box
-        box = $('<div id="guestprompt-' + encodedUserId + '" class="guestprompt"><div class="choices"><a href="javascript:void(paduserlist.answerGuestPrompt(\'' + encodedUserId + '\',false))">Deny</a> <a href="javascript:void(paduserlist.answerGuestPrompt(\'' + encodedUserId + '\',true))">Approve</a></div><div class="guestname"><strong>Guest:</strong> ' + padutils.escapeHtml(displayName) + '</div></div>');
+        box = $('<div id="'+padutils.escapeHtml('guestprompt-' + encodedUserId) + '" class="guestprompt"><div class="choices"><a href="' + padutils.escapeHtml('javascript:void(require('+JSON.stringify(module.id)+').paduserlist.answerGuestPrompt(' + JSON.stringify(encodedUserId) + ',false))')+'">Deny</a> <a href="' + padutils.escapeHtml('javascript:void(require('+JSON.stringify(module.id)+').paduserlist.answerGuestPrompt(' + JSON.stringify(encodedUserId) + ',true))') + '">Approve</a></div><div class="guestname"><strong>Guest:</strong> ' + padutils.escapeHtml(displayName) + '</div></div>');
         $("#guestprompts").append(box);
       }
       else
@@ -711,6 +722,14 @@ var paduserlist = (function()
       }
       
       $("#myswatch").css({'background-color': myUserInfo.colorId});
+      
+      if ($.browser.msie && parseInt($.browser.version) <= 8) {
+        $("#usericon").css({'box-shadow': 'inset 0 0 30px ' + myUserInfo.colorId,'background-color': myUserInfo.colorId});
+      }
+      else
+      {
+        $("#usericon").css({'box-shadow': 'inset 0 0 30px ' + myUserInfo.colorId});
+      }
     }
   };
   return self;
@@ -791,3 +810,5 @@ function showColorPicker()
     $($("#colorpickerswatches li")[myUserInfo.colorId]).addClass("picked"); //seems weird
   }
 }
+
+exports.paduserlist = paduserlist;

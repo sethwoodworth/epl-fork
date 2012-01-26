@@ -19,6 +19,7 @@
  * limitations under the License.
  */
 
+var ERR = require("async-stacktrace");
 var log4js = require('log4js');
 var messageLogger = log4js.getLogger("message");
 var securityManager = require("../db/SecurityManager");
@@ -109,7 +110,7 @@ exports.setSocketIO = function(_socket)
         {
           securityManager.checkAccess (message.padId, message.sessionID, message.token, message.password, function(err, statusObject)
           {
-            if(err) throw err;
+            ERR(err);
             
             //access was granted, mark the client as authorized and handle the message
             if(statusObject.accessStatus == "grant")
@@ -128,7 +129,7 @@ exports.setSocketIO = function(_socket)
         //drop message
         else
         {
-          messageLogger.warn("Droped message cause of bad permissions:" + stringifyWithoutPassword(message));
+          messageLogger.warn("Dropped message cause of bad permissions:" + stringifyWithoutPassword(message));
         }
       }
     });

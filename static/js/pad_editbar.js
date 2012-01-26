@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +19,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+var padutils = require('/pad_utils').padutils;
+var padeditor = require('/pad_editor').padeditor;
+var padsavedrevs = require('/pad_savedrevs').padsavedrevs;
 
 var padeditbar = (function()
 {
@@ -99,26 +109,16 @@ var padeditbar = (function()
           self.toogleDropDown("users");
         }
         else if (cmd == 'embed')
-        {  
-          var padurl = window.location.href.split("?")[0];
-          $('#embedinput').val("<iframe src='" + padurl + "?showControls=true&showChat=true&showLineNumbers=true&useMonospaceFont=false' width=600 height=400>");
-          self.toogleDropDown("embed");
+        {
+          self.setEmbedLinks();
           $('#embedinput').focus().select();
+          self.toogleDropDown("embed");
         }
         else if (cmd == 'import_export')
         {
 	      self.toogleDropDown("importexport");
         }
 
-        else if (cmd == 'readonly')
-        {
-          var basePath = document.location.href.substring(0, document.location.href.indexOf("/p/"));
-          var readonlyLink = basePath + "/ro/" + clientVars.readOnlyId;
-          $('#readonlyImage').attr("src","https://chart.googleapis.com/chart?chs=200x200&cht=qr&chld=H|0&chl=" + readonlyLink);
-          $('#readonlyInput').val(readonlyLink);
-          self.toogleDropDown("readonly");
-          $('#readonlyInput').focus().select();
-        }
         else if (cmd == 'save')
         {
           padsavedrevs.saveNow();
@@ -130,6 +130,7 @@ var padeditbar = (function()
             if (cmd == 'bold' || cmd == 'italic' || cmd == 'underline' || cmd == 'strikethrough') ace.ace_toggleAttributeOnSelection(cmd);
             else if (cmd == 'undo' || cmd == 'redo') ace.ace_doUndoRedo(cmd);
             else if (cmd == 'insertunorderedlist') ace.ace_doInsertUnorderedList();
+            else if (cmd == 'insertorderedlist') ace.ace_doInsertOrderedList();
             else if (cmd == 'indent')
             {
               if (!ace.ace_doIndentOutdent(false))
@@ -160,7 +161,7 @@ var padeditbar = (function()
           }, cmd, true);
         }
       }
-      padeditor.ace.focus();
+      if(padeditor.ace) padeditor.ace.focus();
     },
     toogleDropDown: function(moduleName)
     {
@@ -211,7 +212,27 @@ var padeditbar = (function()
       {
         syncAnimation.done();
       }
+    },
+    setEmbedLinks: function()
+    {
+      if ($('#readonlyinput').is(':checked'))
+      {
+        var basePath = document.location.href.substring(0, document.location.href.indexOf("/p/"));
+        var readonlyLink = basePath + "/ro/" + clientVars.readOnlyId;
+        $('#embedinput').val("<iframe src='" + readonlyLink + "?showControls=true&showChat=true&showLineNumbers=true&useMonospaceFont=false' width=600 height=400>");
+        $('#linkinput').val(readonlyLink);
+        $('#embedreadonlyqr').attr("src","https://chart.googleapis.com/chart?chs=200x200&cht=qr&chld=H|0&chl=" + readonlyLink);
+      }
+      else
+      {
+        var padurl = window.location.href.split("?")[0];
+        $('#embedinput').val("<iframe src='" + padurl + "?showControls=true&showChat=true&showLineNumbers=true&useMonospaceFont=false' width=600 height=400>");
+        $('#linkinput').val(padurl);
+        $('#embedreadonlyqr').attr("src","https://chart.googleapis.com/chart?chs=200x200&cht=qr&chld=H|0&chl=" + padurl);
+      }
     }
   };
   return self;
 }());
+
+exports.padeditbar = padeditbar;

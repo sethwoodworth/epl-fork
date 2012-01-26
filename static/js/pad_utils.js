@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +23,18 @@
 var padutils = {
   escapeHtml: function(x)
   {
-    return String(x).replace(/\</g, '&lt;').replace(/\>/g, '&gt;');
+    return String(x).replace(/[&"<>]/g, function (c) {
+      return {
+        '&': '&amp;',
+        '"': '&quot;',
+        '<': '&lt;',
+        '>': '&gt;'
+      }[c] || c;
+    });
   },
   uniqueId: function()
   {
+    var pad = require('/pad2').pad; // Sidestep circular dependency
     function encodeNum(n, width)
     {
       // returns string that is exactly 'width' chars, padding with zeros
@@ -174,7 +188,7 @@ var padutils = {
         var startIndex = urls[j][0];
         var href = urls[j][1];
         advanceTo(startIndex);
-        pieces.push('<a ', (target ? 'target="' + target + '" ' : ''), 'href="', href.replace(/\"/g, '&quot;'), '">');
+        pieces.push('<a ', (target ? 'target="' + target + '" ' : ''), 'href="', padutils.escapeHtml(href), '">');
         advanceTo(startIndex + href.length);
         pieces.push('</a>');
       }
@@ -213,6 +227,7 @@ var padutils = {
   },
   timediff: function(d)
   {
+    var pad = require('/pad2').pad; // Sidestep circular dependency
     function format(n, word)
     {
       n = Math.round(n);
@@ -473,3 +488,5 @@ window.onerror = function test (msg, url, linenumber)
  
  return false;
 };
+
+exports.padutils = padutils;

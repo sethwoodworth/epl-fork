@@ -20,6 +20,8 @@
  */
 
 var fs = require("fs");
+var os = require("os");
+var path = require('path');
 
 /**
  * The IP ep-lite should listen to
@@ -42,6 +44,17 @@ exports.dbSettings = { "filename" : "../var/dirty.db" };
  * The default Text of a new pad
  */
 exports.defaultPadText = "Welcome to Etherpad Lite!\n\nThis pad text is synchronized as you type, so that everyone viewing this page sees the same text. This allows you to collaborate seamlessly on documents!\n\nEtherpad Lite on Github: http:\/\/j.mp/ep-lite\n";
+
+/**
+ * A flag that requires any user to have a valid session (via the api) before accessing a pad
+ */
+exports.requireSession = false;
+
+/**
+ * A flag that prevents users from creating new pads
+ */
+exports.editOnly = false;
+
 /**
  * A flag that shows if minification is enabled or not
  */
@@ -57,8 +70,27 @@ exports.abiword = null;
  */
 exports.loglevel = "INFO";
 
+/**
+ * Http basic auth, with "user:password" format
+ */
+exports.httpAuth = null;
+
+//checks if abiword is avaiable
+exports.abiwordAvailable = function()
+{
+  if(exports.abiword != null)
+  {
+    return os.type().indexOf("Windows") != -1 ? "withoutPDF" : "yes";
+  }
+  else
+  {
+    return "no";
+  }
+}
+
 //read the settings sync
-var settingsStr = fs.readFileSync("../settings.json").toString();
+var settingsPath = path.normalize(__dirname + "/../../");
+var settingsStr = fs.readFileSync(settingsPath + "settings.json").toString();
 
 //remove all comments
 settingsStr = settingsStr.replace(/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/gm,"").replace(/#.*/g,"").replace(/\/\/.*/g,"");

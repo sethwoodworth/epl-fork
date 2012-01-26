@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +20,7 @@
  * limitations under the License.
  */
 
+var padutils = require('/pad_utils').padutils;
 
 var paddocbar = (function()
 {
@@ -107,11 +114,14 @@ var paddocbar = (function()
     self.renderPassword();
   }
 
+  var pad = undefined;
   var self = {
     title: null,
     password: null,
     init: function(opts)
     {
+      pad = require('/pad2').pad; // Sidestep circular dependency (should be injected).
+
       panels = {
         impexp: {
           animator: getPanelOpenCloseAnimator("impexp", 160)
@@ -438,6 +448,8 @@ var paddocbar = (function()
     },
     handleResizePage: function()
     {
+      // Side-step circular reference. This should be injected.
+      var padsavedrevs = require('/pad_savedrevs').padsavedrevs;
       padsavedrevs.handleResizePage();
     },
     hideLaterIfNoOtherInteraction: function()
@@ -450,3 +462,5 @@ var paddocbar = (function()
   };
   return self;
 }());
+
+exports.paddocbar = paddocbar;

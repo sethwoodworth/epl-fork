@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +20,8 @@
  * limitations under the License.
  */
 
+var padutils = require('/pad_utils').padutils;
+var paddocbar = require('/pad_docbar').paddocbar;
 
 var padsavedrevs = (function()
 {
@@ -33,7 +41,7 @@ var padsavedrevs = (function()
     box.find(".srauthor").html("by " + padutils.escapeHtml(revisionInfo.savedBy));
     var viewLink = '/ep/pad/view/' + pad.getPadId() + '/' + revisionInfo.id;
     box.find(".srview").attr('href', viewLink);
-    var restoreLink = 'javascript:void padsavedrevs.restoreRevision(' + rnum + ');';
+    var restoreLink = 'javascript:void(require('+JSON.stringify(module.id)+').padsavedrevs.restoreRevision(' + JSON.stringify(rnum) + ');';
     box.find(".srrestore").attr('href', restoreLink);
     box.find(".srname").click(function(evt)
     {
@@ -339,9 +347,11 @@ var padsavedrevs = (function()
     $(document).unbind('mouseup', clearScrollRepeatTimer);
   }
 
+  var pad = undefined;
   var self = {
     init: function(initialRevisions)
     {
+      pad = require('/pad2').pad; // Sidestep circular dependency (should be injected).
       self.newRevisionList(initialRevisions, true);
 
       $("#savedrevs-savenow").click(function()
@@ -512,3 +522,5 @@ var padsavedrevs = (function()
   };
   return self;
 }());
+
+exports.padsavedrevs = padsavedrevs;

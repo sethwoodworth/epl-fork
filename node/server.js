@@ -20,6 +20,7 @@
  * limitations under the License.
  */
 
+var ERR = require("async-stacktrace");
 var log4js = require('log4js');
 var os = require("os");
 var socketio = require('socket.io');
@@ -44,8 +45,9 @@ var socketIORouter;
 var version = "";
 try
 {
-  var ref = fs.readFileSync("../.git/HEAD", "utf-8");
-  var refPath = "../.git/" + ref.substring(5, ref.indexOf("\n"));
+  var rootPath = path.normalize(__dirname + "/../")
+  var ref = fs.readFileSync(rootPath + ".git/HEAD", "utf-8");
+  var refPath = rootPath + ".git/" + ref.substring(5, ref.indexOf("\n"));
   version = fs.readFileSync(refPath, "utf-8");
   version = version.substring(0, 7);
   console.log("Your Etherpad Lite git version is " + version);
@@ -76,7 +78,12 @@ async.waterfall([
   {
     //create server
     var app = express.createServer();
-    
+
+    app.use(function (req, res, next) {
+      res.header("Server", serverName);
+      next();
+    });
+
     //load modules that needs a initalized db
     readOnlyManager = require("./db/ReadOnlyManager");
     exporthtml = require("./utils/ExportHtml");
@@ -91,42 +98,47 @@ async.waterfall([
     var httpLogger = log4js.getLogger("http");
     app.configure(function() 
     {
-      app.use(log4js.connectLogger(httpLogger, { level: log4js.levels.INFO, format: ':status, :method :url'}));
+      // Activate http basic auth if it has been defined in settings.json
+      if(settings.httpAuth != null) app.use(basic_auth);
+
+      // If the log level specified in the config file is WARN or ERROR the application server never starts listening to requests as reported in issue #158.
+      // Not installing the log4js connect logger when the log level has a higher severity than INFO since it would not log at that level anyway.
+      if (!(settings.loglevel === "WARN" || settings.loglevel == "ERROR"))
+        app.use(log4js.connectLogger(httpLogger, { level: log4js.levels.INFO, format: ':status, :method :url'}));
       app.use(express.cookieParser());
     });
     
+    app.error(function(err, req, res, next){
+      res.send(500);
+      console.error(err.stack ? err.stack : err.toString());
+      gracefulShutdown();
+    });
+    
+    //serve minified files
+    app.get('/minified/:filename', minify.minifyJS);
+
     //serve static files
+    app.get('/static/js/require-kernel.js', function (req, res, next) {
+      res.header("Content-Type","application/javascript; charset: utf-8");
+      res.write(minify.requireDefinition());
+      res.end();
+    });
     app.get('/static/*', function(req, res)
     { 
-      res.header("Server", serverName);
       var filePath = path.normalize(__dirname + "/.." +
                                     req.url.replace(/\.\./g, '').split("?")[0]);
       res.sendfile(filePath, { maxAge: exports.maxAge });
     });
     
     //serve minified files
-    app.get('/minified/:id', function(req, res, next)
-    { 
-      res.header("Server", serverName);
-      
-      var id = req.params.id;
-      
-      if(id == "pad.js" || id == "timeslider.js")
-      {
-        minify.minifyJS(req,res,id);
-      }
-      else
-      {
-        next();
-      }
-    });
+    app.get('/minified/:filename', minify.minifyJS);
     
     //checks for padAccess
     function hasPadAccess(req, res, callback)
     {
       securityManager.checkAccess(req.params.pad, req.cookies.sessionid, req.cookies.token, req.cookies.password, function(err, accessObj)
       {
-        if(err) throw err;
+        if(ERR(err, callback)) return;
         
         //there is access, continue
         if(accessObj.accessStatus == "grant")
@@ -140,12 +152,30 @@ async.waterfall([
         }
       });
     }
+
+    //checks for basic http auth
+    function basic_auth (req, res, next) {
+      if (req.headers.authorization && req.headers.authorization.search('Basic ') === 0) {
+        // fetch login and password
+        if (new Buffer(req.headers.authorization.split(' ')[1], 'base64').toString() == settings.httpAuth) {
+          next();
+          return;
+        }
+      }
+      
+      res.header('WWW-Authenticate', 'Basic realm="Protected Area"');
+      if (req.headers.authorization) {
+        setTimeout(function () {
+          res.send('Authentication required', 401);
+        }, 1000);
+      } else {
+        res.send('Authentication required', 401);
+      }
+    }
     
     //serve read only pad
     app.get('/ro/:id', function(req, res)
     { 
-      res.header("Server", serverName);
-      
       var html;
       var padId;
       var pad;
@@ -156,12 +186,14 @@ async.waterfall([
         {
           readOnlyManager.getPadId(req.params.id, function(err, _padId)
           {
+            if(ERR(err, callback)) return;
+            
             padId = _padId;
             
             //we need that to tell hasPadAcess about the pad  
             req.params.pad = padId; 
             
-            callback(err);
+            callback();
           });
         },
         //render the html document
@@ -179,8 +211,9 @@ async.waterfall([
             //render the html document
             exporthtml.getPadHTMLDocument(padId, null, false, function(err, _html)
             {
+              if(ERR(err, callback)) return;
               html = _html;
-              callback(err);
+              callback();
             });
           });
         }
@@ -188,7 +221,7 @@ async.waterfall([
       {
         //throw any unexpected error
         if(err && err != "notfound")
-          throw err;
+          ERR(err);
           
         if(err == "notfound") {
           res.send('404 - Not Found', 404);
@@ -199,105 +232,106 @@ async.waterfall([
 	}
       });
     });
-        
-    //serve pad.html under /p
-    app.get('/p/:pad', function(req, res, next)
-    {    
+    
+    //redirects browser to the pad's sanitized url if needed. otherwise, renders the html
+    function goToPad(req, res, render) {
       //ensure the padname is valid and the url doesn't end with a /
       if(!padManager.isValidPadId(req.params.pad) || /\/$/.test(req.url))
       {
         res.send('Such a padname is forbidden', 404);
-        return;
       }
-      
-      res.header("Server", serverName);
-      var filePath = path.normalize(__dirname + "/../static/pad.html");
-      res.sendfile(filePath, { maxAge: exports.maxAge });
+      else
+      {
+        padManager.sanitizePadId(req.params.pad, function(padId) {
+          //the pad id was sanitized, so we redirect to the sanitized version
+          if(padId != req.params.pad)
+          {
+            var real_path = req.path.replace(/^\/p\/[^\/]+/, '/p/' + padId);
+            res.header('Location', real_path);
+            res.send('You should be redirected to <a href="' + real_path + '">' + real_path + '</a>', 302);
+          }
+          //the pad id was fine, so just render it
+          else
+          {
+            render();
+          }
+        });
+      }
+    }
+    
+    //serve pad.html under /p
+    app.get('/p/:pad', function(req, res, next)
+    {    
+      goToPad(req, res, function() {
+        var filePath = path.normalize(__dirname + "/../static/pad.html");
+        res.sendfile(filePath, { maxAge: exports.maxAge });
+      });
     });
     
     //serve timeslider.html under /p/$padname/timeslider
     app.get('/p/:pad/timeslider', function(req, res, next)
     {
-      //ensure the padname is valid and the url doesn't end with a /
-      if(!padManager.isValidPadId(req.params.pad) || /\/$/.test(req.url))
-      {
-        res.send('Such a padname is forbidden', 404);
-        return;
-      }
-      
-      res.header("Server", serverName);
-      var filePath = path.normalize(__dirname + "/../static/timeslider.html");
-      res.sendfile(filePath, { maxAge: exports.maxAge });
+      goToPad(req, res, function() {
+        var filePath = path.normalize(__dirname + "/../static/timeslider.html");
+        res.sendfile(filePath, { maxAge: exports.maxAge });
+      });
     });
     
     //serve timeslider.html under /p/$padname/timeslider
-    app.get('/p/:pad/export/:type', function(req, res, next)
+    app.get('/p/:pad/:rev?/export/:type', function(req, res, next)
     {
-      //ensure the padname is valid and the url doesn't end with a /
-      if(!padManager.isValidPadId(req.params.pad) || /\/$/.test(req.url))
-      {
-        res.send('Such a padname is forbidden', 404);
-        return;
-      }
-    
-      var types = ["pdf", "doc", "txt", "html", "odt"];
-      //send a 404 if we don't support this filetype
-      if(types.indexOf(req.params.type) == -1)
-      {
-        next();
-        return;
-      }
-      
-      //if abiword is disabled, and this is a format we only support with abiword, output a message
-      if(settings.abiword == null && req.params.type != "html" && req.params.type != "txt" )
-      {
-        res.send("Abiword is not enabled at this Etherpad Lite instance. Set the path to Abiword in settings.json to enable this feature");
-        return;
-      }
-      
-      res.header("Access-Control-Allow-Origin", "*");
-      res.header("Server", serverName);
-      
-      hasPadAccess(req, res, function()
-      {
-        exportHandler.doExport(req, res, req.params.pad, req.params.type);
+      goToPad(req, res, function() {
+        var types = ["pdf", "doc", "txt", "html", "odt", "dokuwiki"];
+        //send a 404 if we don't support this filetype
+        if(types.indexOf(req.params.type) == -1)
+        {
+          next();
+          return;
+        }
+        
+        //if abiword is disabled, and this is a format we only support with abiword, output a message
+        if(settings.abiword == null &&
+           ["odt", "pdf", "doc"].indexOf(req.params.type) !== -1)
+        {
+          res.send("Abiword is not enabled at this Etherpad Lite instance. Set the path to Abiword in settings.json to enable this feature");
+          return;
+        }
+        
+        res.header("Access-Control-Allow-Origin", "*");
+        
+        hasPadAccess(req, res, function()
+        {
+          exportHandler.doExport(req, res, req.params.pad, req.params.type);
+        });
       });
     });
     
     //handle import requests
     app.post('/p/:pad/import', function(req, res, next)
     {
-      //ensure the padname is valid and the url doesn't end with a /
-      if(!padManager.isValidPadId(req.params.pad) || /\/$/.test(req.url))
-      {
-        res.send('Such a padname is forbidden', 404);
-        return;
-      }
-    
-      //if abiword is disabled, skip handling this request
-      if(settings.abiword == null)
-      {
-        next();
-        return; 
-      }
+      goToPad(req, res, function() {
+        //if abiword is disabled, skip handling this request
+        if(settings.abiword == null)
+        {
+          next();
+          return; 
+        }
       
-      res.header("Server", serverName);
-      
-      hasPadAccess(req, res, function()
-      {
-        importHandler.doImport(req, res, req.params.pad);
+        hasPadAccess(req, res, function()
+        {
+          importHandler.doImport(req, res, req.params.pad);
+        });
       });
     });
     
     var apiLogger = log4js.getLogger("API");
-    
-    //This is a api call, collect all post informations and pass it to the apiHandler
-    app.get('/api/1/:func', function(req, res)
+
+    //This is for making an api call, collecting all post information and passing it to the apiHandler
+    var apiCaller = function(req, res, fields)
     {
-      res.header("Server", serverName);
       res.header("Content-Type", "application/json; charset=utf-8");
     
-      apiLogger.info("REQUEST, " + req.params.func + ", " + JSON.stringify(req.query));
+      apiLogger.info("REQUEST, " + req.params.func + ", " + JSON.stringify(fields));
       
       //wrap the send function so we can log the response
       res._send = res.send;
@@ -314,7 +348,22 @@ async.waterfall([
       }
       
       //call the api handler
-      apiHandler.handle(req.params.func, req.query, req, res);
+      apiHandler.handle(req.params.func, fields, req, res);
+    }
+    
+    //This is a api GET call, collect all post informations and pass it to the apiHandler
+    app.get('/api/1/:func', function(req, res)
+    {
+      apiCaller(req, res, req.query)
+    });
+
+    //This is a api POST call, collect all post informations and pass it to the apiHandler
+    app.post('/api/1/:func', function(req, res)
+    {
+      new formidable.IncomingForm().parse(req, function(err, fields, files) 
+      {
+        apiCaller(req, res, fields)
+      });
     });
     
     //The Etherpad client side sends information about how a disconnect happen
@@ -340,7 +389,6 @@ async.waterfall([
     //serve index.html under /
     app.get('/', function(req, res)
     {
-      res.header("Server", serverName);
       var filePath = path.normalize(__dirname + "/../static/index.html");
       res.sendfile(filePath, { maxAge: exports.maxAge });
     });
@@ -348,7 +396,6 @@ async.waterfall([
     //serve robots.txt
     app.get('/robots.txt', function(req, res)
     {
-      res.header("Server", serverName);
       var filePath = path.normalize(__dirname + "/../static/robots.txt");
       res.sendfile(filePath, { maxAge: exports.maxAge });
     });
@@ -356,7 +403,6 @@ async.waterfall([
     //serve favicon.ico
     app.get('/favicon.ico', function(req, res)
     {
-      res.header("Server", serverName);
       var filePath = path.normalize(__dirname + "/../static/custom/favicon.ico");
       res.sendfile(filePath, { maxAge: exports.maxAge }, function(err)
       {
@@ -428,19 +474,19 @@ async.waterfall([
     io.set('logger', {
       debug: function (str)
       {
-        socketIOLogger.debug(str);
+        socketIOLogger.debug.apply(socketIOLogger, arguments);
       }, 
       info: function (str)
       {
-        socketIOLogger.info(str);
+        socketIOLogger.info.apply(socketIOLogger, arguments);
       },
       warn: function (str)
       {
-        socketIOLogger.warn(str);
+        socketIOLogger.warn.apply(socketIOLogger, arguments);
       },
       error: function (str)
       {
-        socketIOLogger.error(str);
+        socketIOLogger.error.apply(socketIOLogger, arguments);
       },
     });
     

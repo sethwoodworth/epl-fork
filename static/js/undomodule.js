@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +20,10 @@
  * limitations under the License.
  */
 
+var Changeset = require('/easysync2').Changeset;
+var extend = require('/ace2_common').extend;
 
-undoModule = (function()
+var undoModule = (function()
 {
   var stack = (function()
   {
@@ -323,3 +331,5 @@ undoModule = (function()
     apool: null
   }; // apool is filled in by caller
 })();
+
+exports.undoModule = undoModule;

@@ -1,3 +1,9 @@
+/**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
 // THIS FILE IS ALSO AN APPJET MODULE: etherpad.collab.ace.domline
 // %APPJET%: import("etherpad.admin.plugins");
 /**
@@ -19,6 +25,14 @@
 // requires: top
 // requires: plugins
 // requires: undefined
+
+var plugins = undefined;
+try {
+  plugins = require('/plugins').plugins;
+} catch (e) {
+  // silence
+}
+
 var domline = {};
 domline.noop = function()
 {};
@@ -89,13 +103,23 @@ domline.createDomLine = function(nonEmpty, doesWrap, optBrowser, optDocument)
     if (cls.indexOf('list') >= 0)
     {
       var listType = /(?:^| )list:(\S+)/.exec(cls);
+      var start = /(?:^| )start:(\S+)/.exec(cls);
       if (listType)
       {
         listType = listType[1];
+        start = start?'start="'+start[1]+'"':'';
         if (listType)
         {
-          preHtml = '<ul class="list-' + listType + '"><li>';
-          postHtml = '</li></ul>';
+          if(listType.indexOf("number") < 0)
+          {
+            preHtml = '<ul class="list-' + listType + '"><li>';
+            postHtml = '</li></ul>';
+          }
+          else
+          {
+            preHtml = '<ol '+start+' class="list-' + listType + '"><li>';
+            postHtml = '</li></ol>';
+          }
         }
         result.lineMarker += txt.length;
         return; // don't append any text
@@ -152,7 +176,11 @@ domline.createDomLine = function(nonEmpty, doesWrap, optBrowser, optDocument)
     {
       if (href)
       {
-        extraOpenTags = extraOpenTags + '<a href="' + href.replace(/\"/g, '&quot;') + '">';
+        if(!~href.indexOf("http")) // if the url doesn't include http or https etc prefix it.
+        {
+          href = "http://"+href;
+        }
+        extraOpenTags = extraOpenTags + '<a href="' + domline.escapeHTML(href) + '">';
         extraCloseTags = '</a>' + extraCloseTags;
       }
       if (simpleTags)
@@ -219,7 +247,7 @@ domline.escapeHTML = function(s)
       '&': '&amp;',
       '<': '&lt;',
       '>': '&gt;',
-      '"': '&#34;',
+      '"': '&quot;',
       "'": '&#39;'
     };
   }
@@ -290,3 +318,5 @@ domline.processSpaces = function(s, doesWrap)
   }
   return parts.join('');
 };
+
+exports.domline = domline;

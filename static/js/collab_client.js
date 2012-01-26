@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +25,22 @@ $(window).bind("load", function()
   getCollabClient.windowLoaded = true;
 });
 
+var chat = require('/chat').chat;
+
+// Dependency fill on init. This exists for `pad.socket` only.
+// TODO: bind directly to the socket.
+var pad = undefined;
+function getSocket() {
+  return pad && pad.socket;
+}
+
 /** Call this when the document is ready, and a new Ace2Editor() has been created and inited.
     ACE's ready callback does not need to have fired yet.
     "serverVars" are from calling doc.getCollabClientVars() on the server. */
-function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
+function getCollabClient(ace2editor, serverVars, initialUserInfo, options, _pad)
 {
   var editor = ace2editor;
+  pad = _pad; // Inject pad to avoid a circular dependency.
 
   var rev = serverVars.rev;
   var padId = serverVars.padId;
@@ -75,12 +91,9 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
 
   $(window).bind("unload", function()
   {
-    if (socket)
+    if (getSocket())
     {
-/*socket.onclosed = function() {};
-      socket.onhiccup = function() {};
-      socket.disconnect(true);*/
-      socket.disconnect();
+      setChannelState("DISCONNECTED", "unload");
     }
   });
   if ($.browser.mozilla)
@@ -100,18 +113,6 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
   editor.setBaseAttributedText(serverVars.initialAttributedText, serverVars.apool);
   editor.setUserChangeNotificationCallback(wrapRecordingErrors("handleUserChanges", handleUserChanges));
 
-  function abandonConnection(reason)
-  {
-    if (socket)
-    {
-/*socket.onclosed = function() {};
-      socket.onhiccup = function() {};*/
-      socket.disconnect();
-    }
-    socket = null;
-    setChannelState("DISCONNECTED", reason);
-  }
-
   function dmesg(str)
   {
     if (typeof window.ajlog == "string") window.ajlog += str + '\n';
@@ -120,11 +121,11 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
 
   function handleUserChanges()
   {
-    if ((!socket) || channelState == "CONNECTING")
+    if ((!getSocket()) || channelState == "CONNECTING")
     {
       if (channelState == "CONNECTING" && (((+new Date()) - initialStartConnectTime) > 20000))
       {
-        abandonConnection("initsocketfail"); // give up
+        setChannelState("DISCONNECTED", "initsocketfail");
       }
       else
       {
@@ -141,8 +142,7 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
       if (state == "COMMITTING" && (t - lastCommitTime) > 20000)
       {
         // a commit is taking too long
-        appLevelDisconnectReason = "slowcommit";
-        socket.disconnect();
+        setChannelState("DISCONNECTED", "slowcommit");
       }
       else if (state == "COMMITTING" && (t - lastCommitTime) > 5000)
       {
@@ -230,11 +230,6 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
       handleMessageFromServer(obj);
     });*/
 
-    socket.on('disconnect', function(obj)
-    {
-      handleSocketClosed(true);
-    });
-
 /*var success = false;
     callCatchingErrors("setUpSocket", function() {
       appLevelDisconnectReason = null;
@@ -310,7 +305,7 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
 
   function sendMessage(msg)
   {
-    socket.json.send(
+    getSocket().json.send(
     {
       type: "COLLABROOM",
       component: "pad",
@@ -352,7 +347,7 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
   {
     if (window.console) console.log(evt);
 
-    if (!socket) return;
+    if (!getSocket()) return;
     if (!evt.data) return;
     var wrapper = evt;
     if (wrapper.type != "COLLABROOM") return;
@@ -366,7 +361,7 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
       if (newRev != (rev + 1))
       {
         dmesg("bad message revision on NEW_CHANGES: " + newRev + " not " + (rev + 1));
-        socket.disconnect();
+        setChannelState("DISCONNECTED", "badmessage_newchanges");
         return;
       }
       rev = newRev;
@@ -378,7 +373,7 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
       if (newRev != (rev + 1))
       {
         dmesg("bad message revision on ACCEPT_COMMIT: " + newRev + " not " + (rev + 1));
-        socket.disconnect();
+        setChannelState("DISCONNECTED", "badmessage_acceptcommit");
         return;
       }
       rev = newRev;
@@ -457,7 +452,7 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
     userInfo.userId = userId;
     userSet[userId] = userInfo;
     tellAceActiveAuthorInfo(userInfo);
-    if (!socket) return;
+    if (!getSocket()) return;
     sendMessage(
     {
       type: "USERINFO_UPDATE",
@@ -518,48 +513,6 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
   function dmesgUsers()
   {
     //pad.dmesg($.map(getConnectedUsers(), function(u) { return u.userId.slice(-2); }).join(','));
-  }
-
-  function handleSocketClosed(params)
-  {
-    socket = null;
-
-    $.each(keys(userSet), function()
-    {
-      var uid = String(this);
-      if (uid != userId)
-      {
-        var userInfo = userSet[uid];
-        delete userSet[uid];
-        callbacks.onUserLeave(userInfo);
-        dmesgUsers();
-      }
-    });
-
-    var reason = appLevelDisconnectReason || params.reason;
-    var shouldReconnect = params.reconnect;
-    if (shouldReconnect)
-    {
-
-      // determine if this is a tight reconnect loop due to weird connectivity problems
-      reconnectTimes.push(+new Date());
-      var TOO_MANY_RECONNECTS = 8;
-      var TOO_SHORT_A_TIME_MS = 10000;
-      if (reconnectTimes.length >= TOO_MANY_RECONNECTS && ((+new Date()) - reconnectTimes[reconnectTimes.length - TOO_MANY_RECONNECTS]) < TOO_SHORT_A_TIME_MS)
-      {
-        setChannelState("DISCONNECTED", "looping");
-      }
-      else
-      {
-        setChannelState("RECONNECTING", reason);
-        setUpSocket();
-      }
-
-    }
-    else
-    {
-      setChannelState("DISCONNECTED", reason);
-    }
   }
 
   function setChannelState(newChannelState, moreInfo)
@@ -648,128 +601,6 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
   function getCurrentRevisionNumber()
   {
     return rev;
-  }
-
-  function getDiagnosticInfo()
-  {
-    var maxCaughtErrors = 3;
-    var maxAceErrors = 3;
-    var maxDebugMessages = 50;
-    var longStringCutoff = 500;
-
-    function trunc(str)
-    {
-      return String(str).substring(0, longStringCutoff);
-    }
-
-    var info = {
-      errors: {
-        length: 0
-      }
-    };
-
-    function addError(e, catcher, time)
-    {
-      var error = {
-        catcher: catcher
-      };
-      if (time) error.time = time;
-
-      // a little over-cautious?
-      try
-      {
-        if (e.description) error.description = e.description;
-      }
-      catch (x)
-      {}
-      try
-      {
-        if (e.fileName) error.fileName = e.fileName;
-      }
-      catch (x)
-      {}
-      try
-      {
-        if (e.lineNumber) error.lineNumber = e.lineNumber;
-      }
-      catch (x)
-      {}
-      try
-      {
-        if (e.message) error.message = e.message;
-      }
-      catch (x)
-      {}
-      try
-      {
-        if (e.name) error.name = e.name;
-      }
-      catch (x)
-      {}
-      try
-      {
-        if (e.number) error.number = e.number;
-      }
-      catch (x)
-      {}
-      try
-      {
-        if (e.stack) error.stack = trunc(e.stack);
-      }
-      catch (x)
-      {}
-
-      info.errors[info.errors.length] = error;
-      info.errors.length++;
-    }
-    for (var i = 0;
-    ((i < caughtErrors.length) && (i < maxCaughtErrors)); i++)
-    {
-      addError(caughtErrors[i], caughtErrorCatchers[i], caughtErrorTimes[i]);
-    }
-    if (editor)
-    {
-      var aceErrors = editor.getUnhandledErrors();
-      for (var i = 0;
-      ((i < aceErrors.length) && (i < maxAceErrors)); i++)
-      {
-        var errorRecord = aceErrors[i];
-        addError(errorRecord.error, "ACE", errorRecord.time);
-      }
-    }
-
-    info.time = +new Date();
-    info.collabState = state;
-    info.channelState = channelState;
-    info.lastCommitTime = lastCommitTime;
-    info.numSocketReconnects = reconnectTimes.length;
-    info.userId = userId;
-    info.currentRev = rev;
-    info.participants = (function()
-    {
-      var pp = [];
-      for (var u in userSet)
-      {
-        pp.push(u);
-      }
-      return pp.join(',');
-    })();
-
-    if (debugMessages.length > maxDebugMessages)
-    {
-      debugMessages = debugMessages.slice(debugMessages.length - maxDebugMessages, debugMessages.length);
-    }
-
-    info.debugMessages = {
-      length: 0
-    };
-    for (var i = 0; i < debugMessages.length; i++)
-    {
-      info.debugMessages[i] = trunc(debugMessages[i]);
-      info.debugMessages.length++;
-    }
-
-    return info;
   }
 
   function getMissedChanges()
@@ -863,10 +694,10 @@ function getCollabClient(ace2editor, serverVars, initialUserInfo, options)
     sendClientMessage: sendClientMessage,
     sendMessage: sendMessage,
     getCurrentRevisionNumber: getCurrentRevisionNumber,
-    getDiagnosticInfo: getDiagnosticInfo,
     getMissedChanges: getMissedChanges,
     callWhenNotCommitting: callWhenNotCommitting,
-    addHistoricalAuthors: tellAceAboutHistoricalAuthors
+    addHistoricalAuthors: tellAceAboutHistoricalAuthors,
+    setChannelState: setChannelState
   });
 }
 
@@ -893,3 +724,6 @@ function selectElementContents(elem)
     }
   }
 }
+
+exports.getCollabClient = getCollabClient;
+exports.selectElementContents = selectElementContents;

@@ -92,10 +92,6 @@ a img
   background: -webkit-linear-gradient(#ddd, #fff);
 }
 
-input[type="file"] {
- color: #fff;
-}
-
 #editbar ul li.separator
 {
   border: inherit;
@@ -469,15 +465,13 @@ table#otheruserstable { display: none; }
   
 .modaldialog.cboxreconnecting .modaldialog-inner,
 .modaldialog.cboxconnecting .modaldialog-inner {
-  background: url(static/img/connectingbar.gif) no-repeat center 60px;
+  background: url(../../static/img/connectingbar.gif) no-repeat center 60px;
   height: 100px;
 }
-.modaldialog.cboxreconnecting {
-  background: #fed;
-}
+.modaldialog.cboxreconnecting, 
 .modaldialog.cboxconnecting,
 .modaldialog.cboxdisconnected {
-  background: #fdd;
+  background: #8FCDE0;
 }
 .cboxdisconnected #connectionboxinner div { display: none; }
 .cboxdisconnected_userdup #connectionboxinner #disconnected_userdup { display: block; }
@@ -786,11 +780,15 @@ padding: 10px;
 border-radius: 6px; 
 }
 
-#embedcode, #readonlyUrl {
+#embedreadonly {
+float:right;
+}
+
+#embedcode, #readonlyUrl, #linkcode {
 margin-left:10px;
 }
 
-#embedinput, #readonlyInput{
+#embedinput, #readonlyInput, #linkinput {
 width:375px;
 height:24px;
 display:inline;
@@ -968,14 +966,15 @@ position: relative;
 } 
 
 .ui-resizable-nw {
-  background-image: url("../img/nw-resize.png");
+  background-image: url("../../static/img/etherpad_lite_icons.png");
+  background-position: 0 -416px;
   background-repeat: no-repeat;
   background-size: 100% auto;
   cursor: nw-resize;
-  height: 22px;
-  left: 0;
-  top: 0;
-  width: 22px;
+  height: 17px;
+  left: 3px;
+  top: 3px;
+  width: 17px;
 } 
 
 .ui-resizable-ne 
@@ -1001,7 +1000,7 @@ position: relative;
   padding: 10px;
   -moz-border-radius: 6px;
   border-radius: 6px;
-  height:170px;
+  height:190px;
   display:none;
 }
 
@@ -1020,17 +1019,17 @@ position: relative;
 }
 
 .exporttype{
-  line-height:25px;
+  line-height:20px;
   background-repeat:no-repeat;
   padding-left:25px;
-  background-image: url("../img/fileicons.gif");
+  background-image: url("../../static/img/etherpad_lite_icons.png");
   color:#fff;
   text-decoration:none;
 }
 
 #importexportline{
   border: dotted 1px;
-  height: 165px;
+  height: 185px;
   position:absolute;
   width:0px;
   left:260px;
@@ -1043,27 +1042,31 @@ position: relative;
 }
 
 #exporthtml{
-  background-position: 2px -25px;
+  background-position: 0px -299px;
 }
 
 #exportplain{
-  background-position: 2px -121px;
+  background-position: 0px -395px;
 }
 
 #exportword{
-  background-position: 2px -0px;
+  background-position: 0px -275px;
 }
 
 #exportpdf{
-  background-position: 2px -97px;
+  background-position: 0px -371px;
 }
 
 #exportopen{
-  background-position: 2px -74px;
+  background-position: 0px -347px;
 }
 
 #exportwordle{
-  background-position: 2px -49px;
+  background-position: 0px -323px;
+}
+
+#exportdokuwiki{
+  background-position: 0px -459px;
 }
 
 #export a{
@@ -1142,8 +1145,103 @@ width:33px !important;
   color: #999;
 }
 
+label[for=readonlyinput] {
+  margin: 0 10px 0 2px;
+}
+
+
+#qr_center {
+  margin: 10px 10px auto 0;
+  text-align: center;
+}
+
+#qrcode{
+  margin-left:10px;
+}
+
+@media screen and (max-width: 960px) {
+  .modaldialog {
+    position: relative;
+    margin: 0 auto;
+    width: 80%;
+    top: 40px;
+    left: 0;
+  }
+}
+
 @media screen and (max-width: 600px) {
   #editbar ul li {
     padding: 4px 1px;
+  }  
+}
+
+@media only screen and (min-device-width: 320px) and (max-device-width: 720px) {
+  #editbar ul li {
+    padding: 4px 3px;
+  }
+  #editbar ul#menu_right > li {
+    padding: 4px 8px;
+    margin-top: 2px;
+  }
+  #chaticon {
+    opacity: .8;
+  }
+  #users {
+    right: 4px;
+  }
+  #mycolorpicker {
+    left: -72px; /* #mycolorpicker:width - #users:width */
+  }
+  #editorcontainer {
+    margin-bottom: 33px;
+  }
+  #editbar ul#menu_right  {
+    background: #f7f7f7;
+    background: -moz-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    background: -ms-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    background: -o-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    background: -webkit-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    width: 100%;
+    overflow: hidden;
+    height: 32px;
+    position: fixed;
+    bottom: 0;
+    border-top: 1px solid #ccc;
+  }
+  #editbar ul#menu_right li:not(:last-child) {
+    display: none;
+  }
+  #editbar ul#menu_right li:last-child {
+    height: 24px;
+    border-radius: 0;
+    margin-top: 0;
+    border: 0;
+    float: right;
+  }
+  #chaticon {
+    bottom: 0;
+    right: 55px;
+    border-right: none;
+    border-radius: 0;
+    background: #f7f7f7;
+    background: -moz-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    background: -ms-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    background: -o-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    background: -webkit-linear-gradient(#f7f7f7, #f1f1f1 80%);
+    border: 0;
+  }
+  #chatbox {
+    bottom: 32px;
+    right: 0;
+    border-top-right-radius: 0;
+  }
+  #editbar ul li a span {
+    top: -3px;
+  }
+  #usericonback {
+    margin-top: 4px;
   }
 }
+.rtl{
+  direction:RTL;
+} 

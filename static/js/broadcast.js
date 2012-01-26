@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +21,12 @@
  */
 
 var global = this;
+
+var makeCSSManager = require('/cssmanager_client').makeCSSManager;
+var domline = require('/domline_client').domline;
+var Changeset = require('/easysync2_client').Changeset;
+var AttribPool = require('/easysync2_client').AttribPool;
+var linestylefilter = require('/linestylefilter_client').linestylefilter;
 
 function loadBroadcastJS()
 {
@@ -752,3 +764,5 @@ function loadBroadcastJS()
 
   receiveAuthorData(clientVars.historicalAuthorData);
 }
+
+exports.loadBroadcastJS = loadBroadcastJS;

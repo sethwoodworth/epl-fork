@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +19,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+var Ace2Common = require('/ace2_common');
+// Extract useful method defined in the other module.
+var isNodeText = Ace2Common.isNodeText;
+var object = Ace2Common.object;
+var extend = Ace2Common.extend;
+var forEach = Ace2Common.forEach;
+var map = Ace2Common.map;
+var filter = Ace2Common.filter;
+var isArray = Ace2Common.isArray;
+var browser = Ace2Common.browser;
+var getAssoc = Ace2Common.getAssoc;
+var setAssoc = Ace2Common.setAssoc;
+var binarySearch = Ace2Common.binarySearch;
+var binarySearchInfinite = Ace2Common.binarySearchInfinite;
+var htmlPrettyEscape = Ace2Common.htmlPrettyEscape;
+var map = Ace2Common.map;
+
+var makeChangesetTracker = require('/changesettracker').makeChangesetTracker;
+var colorutils = require('/colorutils').colorutils;
+var makeContentCollector = require('/contentcollector').makeContentCollector;
+var makeCSSManager = require('/cssmanager').makeCSSManager;
+var domline = require('/domline').domline;
+var AttribPool = require('/easysync2').AttribPool;
+var Changeset = require('/easysync2').Changeset;
+var linestylefilter = require('/linestylefilter').linestylefilter;
+var newSkipList = require('/skiplist').newSkipList;
+var undoModule = require('/undomodule').undoModule;
+var makeVirtualLineView = require('/virtual_lines').makeVirtualLineView;
 
 function OUTER(gscope)
 {
@@ -79,7 +114,7 @@ function OUTER(gscope)
   var doesWrap = true;
   var hasLineNumbers = true;
   var isStyled = true;
-
+  
   // space around the innermost iframe element
   var iframePadLeft = MIN_LINEDIV_WIDTH + LINE_NUMBER_PADDING_RIGHT + EDIT_BODY_PADDING_LEFT;
   var iframePadTop = EDIT_BODY_PADDING_TOP;
@@ -1099,6 +1134,8 @@ function OUTER(gscope)
     else if (k == "showslinenumbers")
     {
       hasLineNumbers = !! value;
+      // disable line numbers on mobile devices
+      if (browser.mobile) hasLineNumbers = false;
       setClassPresence(sideDiv, "sidedivhidden", !hasLineNumbers);
       fixView();
     }
@@ -1126,6 +1163,10 @@ function OUTER(gscope)
     else if (k == 'textsize')
     {
       setTextSize(value);
+    }
+    else if (k == 'rtlistrue')
+    {
+      setClassPresence(root, "rtl", !! value);
     }
   }
 
@@ -3471,7 +3512,9 @@ function OUTER(gscope)
   function handleClick(evt)
   {
     //hide the dropdowns
-    window.top.padeditbar.toogleDropDown("none");
+    if(window.top.padeditbar){ // required in case its in an iframe should probably use parent..  See Issue 327 https://github.com/Pita/etherpad-lite/issues/327
+      window.top.padeditbar.toogleDropDown("none");
+    }
   
     inCallStack("handleClick", function()
     {
@@ -3518,23 +3561,44 @@ function OUTER(gscope)
     var lineNum = rep.selStart[0];
     var listType = getLineListType(lineNum);
 
-    performDocumentReplaceSelection('\n');
     if (listType)
     {
-      if (lineNum + 1 < rep.lines.length())
+      var text = rep.lines.atIndex(lineNum).text;
+      listType = /([a-z]+)([12345678])/.exec(listType);
+      var type  = listType[1];
+      var level = Number(listType[2]);
+      
+      //detect empty list item; exclude indentation
+      if(text === '*' && type !== "indent")
       {
-        setLineListType(lineNum + 1, listType);
+        //if not already on the highest level
+        if(level > 1)
+        {
+          setLineListType(lineNum, type+(level-1));//automatically decrease the level
+        }
+        else
+        {
+          setLineListType(lineNum, '');//remove the list
+          renumberList(lineNum + 1);//trigger renumbering of list that may be right after
+        }
+      }
+      else if (lineNum + 1 < rep.lines.length())
+      {
+        performDocumentReplaceSelection('\n');
+        setLineListType(lineNum + 1, type+level);
       }
     }
     else
     {
+      performDocumentReplaceSelection('\n');
       handleReturnIndentation();
     }
   }
 
   function doIndentOutdent(isOut)
   {
-    if (!(rep.selStart && rep.selEnd))
+    if (!(rep.selStart && rep.selEnd) ||
+        ((rep.selStart[0] == rep.selEnd[0]) && (rep.selStart[1] == rep.selEnd[1]) &&  rep.selEnd[1] > 1))
     {
       return false;
     }
@@ -3544,24 +3608,24 @@ function OUTER(gscope)
     lastLine = Math.max(firstLine, rep.selEnd[0] - ((rep.selEnd[1] == 0) ? 1 : 0));
 
     var mods = [];
-    var foundLists = false;
     for (var n = firstLine; n <= lastLine; n++)
     {
       var listType = getLineListType(n);
+      var t = 'indent';
+      var level = 0;
       if (listType)
       {
         listType = /([a-z]+)([12345678])/.exec(listType);
         if (listType)
         {
-          foundLists = true;
-          var t = listType[1];
-          var level = Number(listType[2]);
-          var newLevel = Math.max(1, Math.min(MAX_LIST_LEVEL, level + (isOut ? -1 : 1)));
-          if (level != newLevel)
-          {
-            mods.push([n, t + newLevel]);
-          }
+          t = listType[1];
+          level = Number(listType[2]);
         }
+      }
+      var newLevel = Math.max(0, Math.min(MAX_LIST_LEVEL, level + (isOut ? -1 : 1)));
+      if (level != newLevel)
+      {
+        mods.push([n, (newLevel > 0) ? t + newLevel : '']);
       }
     }
 
@@ -3570,7 +3634,7 @@ function OUTER(gscope)
       setLineListTypes(mods);
     }
 
-    return foundLists;
+    return true;
   }
   editorInfo.ace_doIndentOutdent = doIndentOutdent;
 
@@ -3669,6 +3733,15 @@ function OUTER(gscope)
           performDocumentReplaceSelection('');
         }
       }
+    }
+     //if the list has been removed, it is necessary to renumber
+    //starting from the *next* line because the list may have been
+    //separated. If it returns null, it means that the list was not cut, try
+    //from the current one.
+    var line = caretLine();
+    if(line != -1 && renumberList(line+1)==null)
+    {
+      renumberList(line);
     }
   }
 
@@ -3818,7 +3891,7 @@ function OUTER(gscope)
           //scrollSelectionIntoView();
           specialHandled = true;
         }
-        if ((!specialHandled) && isTypeForCmdKey && String.fromCharCode(which).toLowerCase() == "z" && (evt.metaKey || evt.ctrlKey))
+        if ((!specialHandled) && isTypeForCmdKey && String.fromCharCode(which).toLowerCase() == "z" && (evt.metaKey || evt.ctrlKey) && !evt.altKey)
         {
           // cmd-Z (undo)
           fastIncorp(6);
@@ -4039,8 +4112,6 @@ function OUTER(gscope)
     catch (e)
     {}
     if (!origSelectionRange) return false;
-    var selectionParent = origSelectionRange.parentElement();
-    if (selectionParent.ownerDocument != doc) return false;
     return true;
   }
 
@@ -5168,7 +5239,83 @@ function OUTER(gscope)
       [lineNum, listType]
     ]);
   }
-
+  
+  function renumberList(lineNum){
+    //1-check we are in a list
+    var type = getLineListType(lineNum);
+    if(!type)
+    {
+      return null;
+    }
+    type = /([a-z]+)[12345678]/.exec(type);
+    if(type[1] == "indent")
+    {
+      return null;
+    }
+    
+    //2-find the first line of the list
+    while(lineNum-1 >= 0 && (type=getLineListType(lineNum-1)))
+    {
+      type = /([a-z]+)[12345678]/.exec(type);
+      if(type[1] == "indent")
+        break;
+      lineNum--;
+    }
+    
+    //3-renumber every list item of the same level from the beginning, level 1
+    //IMPORTANT: never skip a level because there imbrication may be arbitrary
+    var builder = Changeset.builder(rep.lines.totalWidth());
+    loc = [0,0];
+    function applyNumberList(line, level)
+    {
+      //init
+      var position = 1;
+      var curLevel = level;
+      var listType;
+      //loop over the lines
+      while(listType = getLineListType(line))
+      {
+        //apply new num
+        listType = /([a-z]+)([12345678])/.exec(listType);
+        curLevel = Number(listType[2]);
+        if(isNaN(curLevel) || listType[0] == "indent")
+        {
+          return line;
+        }
+        else if(curLevel == level)
+        {
+          buildKeepRange(builder, loc, (loc = [line, 0]));
+          buildKeepRange(builder, loc, (loc = [line, 1]), [
+            ['start', position]
+          ], rep.apool);
+          
+          position++;
+          line++;
+        }
+        else if(curLevel < level)
+        {
+          return line;//back to parent
+        }
+        else
+        {
+          line = applyNumberList(line, level+1);//recursive call
+        }
+      }
+      return line;
+    }
+    
+    applyNumberList(lineNum, 1);
+    var cs = builder.toString();
+    if (!Changeset.isIdentity(cs))
+    {
+      performDocumentApplyChangeset(cs);
+    }
+    
+    //4-apply the modifications
+    
+    
+  }
+  
   function setLineListTypes(lineNumTypePairsInOrder)
   {
     var loc = [0, 0];
@@ -5215,9 +5362,18 @@ function OUTER(gscope)
     {
       performDocumentApplyChangeset(cs);
     }
+    
+    //if the list has been removed, it is necessary to renumber
+    //starting from the *next* line because the list may have been
+    //separated. If it returns null, it means that the list was not cut, try
+    //from the current one.
+    if(renumberList(lineNum+1)==null)
+    {
+      renumberList(lineNum);
+    }
   }
 
-  function doInsertUnorderedList()
+  function doInsertList(type)
   {
     if (!(rep.selStart && rep.selEnd))
     {
@@ -5231,7 +5387,8 @@ function OUTER(gscope)
     var allLinesAreList = true;
     for (var n = firstLine; n <= lastLine; n++)
     {
-      if (!getLineListType(n))
+      var listType = getLineListType(n);
+      if (!listType || listType.slice(0, type.length) != type)
       {
         allLinesAreList = false;
         break;
@@ -5241,12 +5398,28 @@ function OUTER(gscope)
     var mods = [];
     for (var n = firstLine; n <= lastLine; n++)
     {
+      var t = '';
+      var level = 0;
+      var listType = /([a-z]+)([12345678])/.exec(getLineListType(n));
+      if (listType)
+      {
+        t = listType[1];
+        level = Number(listType[2]);
+      }
       var t = getLineListType(n);
-      mods.push([n, allLinesAreList ? '' : (t ? t : 'bullet1')]);
+      mods.push([n, allLinesAreList ? 'indent' + level : (t ? type + level : type + '1')]);
     }
     setLineListTypes(mods);
   }
+  
+  function doInsertUnorderedList(){
+    doInsertList('bullet');
+  }
+  function doInsertOrderedList(){
+    doInsertList('number');
+  }
   editorInfo.ace_doInsertUnorderedList = doInsertUnorderedList;
+  editorInfo.ace_doInsertOrderedList = doInsertOrderedList;
 
   var mozillaFakeArrows = (browser.mozilla && (function()
   {
@@ -5647,31 +5820,17 @@ function OUTER(gscope)
   {
     var newNumLines = rep.lines.length();
     if (newNumLines < 1) newNumLines = 1;
-    if (newNumLines != lineNumbersShown)
-    {
-      var container = sideDivInner;
-      var odoc = outerWin.document;
-      while (lineNumbersShown < newNumLines)
-      {
-        lineNumbersShown++;
-        var n = lineNumbersShown;
-        var div = odoc.createElement("DIV");
-        div.appendChild(odoc.createTextNode(String(n)));
-        container.appendChild(div);
-      }
-      while (lineNumbersShown > newNumLines)
-      {
-        container.removeChild(container.lastChild);
-        lineNumbersShown--;
-      }
-    }
-
+	//update height of all current line numbers
     if (currentCallStack && currentCallStack.domClean)
     {
       var a = sideDivInner.firstChild;
       var b = doc.body.firstChild;
+      var n = 0;
       while (a && b)
       {
+	if(n > lineNumbersShown) //all updated, break
+	  break;
+
         var h = (b.clientHeight || b.offsetHeight);
         if (b.nextSibling)
         {
@@ -5685,10 +5844,42 @@ function OUTER(gscope)
         if (h)
         {
           var hpx = h + "px";
-          if (a.style.height != hpx) a.style.height = hpx;
+          if (a.style.height != hpx) {
+	    a.style.height = hpx;
+	  }
         }
         a = a.nextSibling;
         b = b.nextSibling;
+	n++;
+      }
+    }	
+	
+    if (newNumLines != lineNumbersShown)
+    {
+      var container = sideDivInner;
+      var odoc = outerWin.document;
+      var fragment = odoc.createDocumentFragment();
+      while (lineNumbersShown < newNumLines)
+      {
+        lineNumbersShown++;
+        var n = lineNumbersShown;
+        var div = odoc.createElement("DIV");	
+	//calculate height for new line number
+	var h = (b.clientHeight || b.offsetHeight);
+	if (b.nextSibling)
+	  h = b.nextSibling.offsetTop - b.offsetTop;
+	if(h) // apply style to div
+	  div.style.height = h +"px";
+			
+        div.appendChild(odoc.createTextNode(String(n)));
+	fragment.appendChild(div);
+	b = b.nextSibling;
+      }
+      container.appendChild(fragment);
+      while (lineNumbersShown > newNumLines)
+      {
+        container.removeChild(container.lastChild);
+        lineNumbersShown--;
       }
     }
   }
@@ -5696,3 +5887,5 @@ function OUTER(gscope)
 };
 
 OUTER(this);
+
+exports.OUTER = OUTER; // This is probably unimportant.

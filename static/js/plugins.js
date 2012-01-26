@@ -1,7 +1,14 @@
+/**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
 plugins = {
   callHook: function(hookName, args)
   {
-    var hook = clientVars.hooks[hookName];
+    var global = (function () {return this}());
+    var hook = ((global.clientVars || {}).hooks || {})[hookName];
     if (hook === undefined) return [];
     var res = [];
     for (var i = 0, N = hook.length; i < N; i++)
@@ -24,3 +31,5 @@ plugins = {
     }).join(sep || "");
   }
 };
+
+exports.plugins = plugins;

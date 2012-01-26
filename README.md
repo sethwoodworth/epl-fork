@@ -9,8 +9,14 @@ documented codebase makes it easier for developers to improve the code and contr
 
 Etherpad Lite is optimized to be easy embeddable. It provides a [HTTP API](https://github.com/Pita/etherpad-lite/wiki/HTTP-API) 
 that allows your web application to manage pads, users and groups. 
-You can use this [PHP Client](https://github.com/TomNomNom/etherpad-lite-client) to work with the API 
-(If you don't want to use PHP, feel free to create a client for your favourite web development language). 
+There are several clients in for this API:
+
+* [PHP](https://github.com/TomNomNom/etherpad-lite-client), thx to [TomNomNom](https://github.com/TomNomNom)
+* [.Net](https://github.com/ja-jo/EtherpadLiteDotNet), thx to [ja-jo](https://github.com/ja-jo)
+* [Node.js](https://github.com/tomassedovic/etherpad-lite-client-js), thx to [tomassedovic](https://github.com/tomassedovic)
+* [Ruby](https://github.com/jhollinger/ruby-etherpad-lite), thx to [jhollinger](https://github.com/jhollinger)
+* [Python](https://github.com/devjones/PyEtherpadLite), thx to [devjones](https://github.com/devjones)
+
 There is also a [jQuery plugin](https://github.com/johnyma22/etherpad-lite-jquery-plugin) that helps you to embed Pads into your website
 
 **Online demo**<br>
@@ -51,20 +57,21 @@ Here is the **[FAQ](https://github.com/Pita/etherpad-lite/wiki/FAQ)**
 **As root:**
 
 <ol>
-  <li>Install the dependencies. We need the gzip, git, curl, libssl develop libraries and python <br><code>apt-get install gzip git-core curl python libssl-dev</code></li><br>
+  <li>Install the dependencies. We need gzip, git, curl, libssl develop libraries, python and gcc. <br><i>For Debian/Ubuntu</i> <code>apt-get install gzip git-core curl python libssl-dev build-essential</code><br>
+  <i>For Fedora/CentOS</i> <code>yum install gzip git-core curl python openssl-devel && yum groupinstall "Development Tools"</code>
+  </li><br>
   <li>Install node.js 
     <ol type="a">
-      <li>Download the latest <b>0.4.x</b> node.js release from <a href="http://nodejs.org/#download">http://nodejs.org/#download</a></li>
-      <li>Extract it with <code>tar xf node-v0.4*</code></li>
-      <li>Move into the node folder <code>cd node-v0.4*</code> and build node with <code>./configure && make && make install</code></li>
+      <li>Download the latest <b>0.6.x</b> node.js release from <a href="http://nodejs.org/#download">http://nodejs.org/#download</a></li>
+      <li>Extract it with <code>tar xf node-v0.6*</code></li>
+      <li>Move into the node folder <code>cd node-v0.6*</code> and build node with <code>./configure && make && make install</code></li>
     </ol>
   </li>
-  <li>Install npm <code>curl http://npmjs.org/install.sh | sh</code></li>
 </ol>
 
 **As any user (we recommend creating a separate user called etherpad-lite):**
 
-<ol start="4">
+<ol start="3">
   <li>Move to a folder where you want to install Etherpad Lite. Clone the git repository <code>git clone 'git://github.com/Pita/etherpad-lite.git'</code><br>&nbsp;</li>
   <li>Install the dependencies with <code>bin/installDeps.sh</code><br>&nbsp;</li>
   <li>Start it with <code>bin/run.sh</code><br>&nbsp;</li>
@@ -73,6 +80,8 @@ Here is the **[FAQ](https://github.com/Pita/etherpad-lite/wiki/FAQ)**
 
 ## Next Steps
 You can modify the settings in the file `settings.json`
+
+You should use a dedicated database such as "mysql" if you are planning on using etherpad-lite in a production environment, the "dirty" database driver is only for testing and/or development purposes.
 
 You can update to the latest version with `git pull origin`. The next start with bin/run.sh will update the dependencies
 
@@ -89,7 +98,7 @@ Look at this wiki pages:
 You can find more information in the [wiki](https://github.com/Pita/etherpad-lite/wiki). Feel free to improve these wiki pages
 
 # Develop
-If you're new to git and github, start here <http://learn.github.com/p/intro.html>.
+If you're new to git and github, start by watching [this video](http://youtu.be/67-Q26YH97E) then read this [git guide](http://learn.github.com/p/intro.html).
 
 If you're new to node.js, start with this video <http://youtu.be/jo_B4LTHi3I>.
 
@@ -102,11 +111,14 @@ You can join the [mailinglist](http://groups.google.com/group/etherpad-lite-dev)
 
 You also help the project, if you only host a Etherpad Lite instance and share your experience with us.
 
+Please consider using [jshint](http://www.jshint.com/about/) if you plan to
+contribute to Etherpad Lite.
+
 # Modules created for this project
 
 * [ueberDB](https://github.com/Pita/ueberDB) "transforms every database into a object key value store" - manages all database access
-* [doc.md](https://github.com/Pita/doc.md) "A simple JSDoc documentation tool that creates markdown for node.js modules exports" - is used to generate the docs
 * [channels](https://github.com/Pita/channels) "Event channels in node.js" - ensures that ueberDB operations are atomic and in series for each key
+* [async-stacktrace](https://github.com/Pita/async-stacktrace) "Improves node.js stacktraces and makes it easier to handle errors"
 
 # License
 [Apache License v2](http://www.apache.org/licenses/LICENSE-2.0.html)

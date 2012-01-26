@@ -1,4 +1,10 @@
 /**
+ * This code is mostly from the old Etherpad. Please help us to comment this code. 
+ * This helps other people to understand this code better and helps them to improve it.
+ * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
+ */
+
+/**
  * Copyright 2009 Google Inc., 2011 Peter 'Pita' Martischka (Primary Technology Ltd)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +23,27 @@
 /* global $, window */
 
 var socket;
-var LineNumbersDisabled = false;
-var useMonospaceFontGlobal = false;
-var globalUserName = false;
+
+var settings = {};
+settings.LineNumbersDisabled = false;
+settings.noColors = false;
+settings.useMonospaceFontGlobal = false;
+settings.globalUserName = false;
+settings.hideQRCode = false;
+settings.rtlIsTrue = false;
+
+var chat = require('/chat').chat;
+var getCollabClient = require('/collab_client').getCollabClient;
+var padconnectionstatus = require('/pad_connectionstatus').padconnectionstatus;
+var padcookie = require('/pad_cookie').padcookie;
+var paddocbar = require('/pad_docbar').paddocbar;
+var padeditbar = require('/pad_editbar').padeditbar;
+var padeditor = require('/pad_editor').padeditor;
+var padimpexp = require('/pad_impexp').padimpexp;
+var padmodals = require('/pad_modals').padmodals;
+var padsavedrevs = require('/pad_savedrevs').padsavedrevs;
+var paduserlist = require('/pad_userlist').paduserlist;
+var padutils = require('/pad_utils').padutils;
 
 $(document).ready(function()
 {
@@ -78,11 +102,24 @@ function randomString()
 
 function getParams()
 {
-  var showControls = getUrlVars()["showControls"];
-  var showChat = getUrlVars()["showChat"];
-  var userName = unescape(getUrlVars()["userName"]);
-  var showLineNumbers = getUrlVars()["showLineNumbers"];
-  var useMonospaceFont = getUrlVars()["useMonospaceFont"];
+  var params = getUrlVars()
+  var showControls = params["showControls"];
+  var showChat = params["showChat"];
+  var userName = params["userName"];
+  var showLineNumbers = params["showLineNumbers"];
+  var useMonospaceFont = params["useMonospaceFont"];
+  var IsnoColors = params["noColors"];
+  var hideQRCode = params["hideQRCode"];
+  var rtl = params["rtl"];
+
+  if(IsnoColors)
+  {
+    if(IsnoColors == "true")
+    {
+      settings.noColors = true;
+      $('#clearAuthorship').hide();
+    }
+  }
   if(showControls)
   {
     if(showControls == "false")
@@ -91,7 +128,6 @@ function getParams()
       $('#editorcontainer').css({"top":"0px"});
     }
   }
-
   if(showChat)
   {
     if(showChat == "false")
@@ -99,28 +135,35 @@ function getParams()
       $('#chaticon').hide();
     }
   }
-
   if(showLineNumbers)
   {
     if(showLineNumbers == "false")
     {
-      LineNumbersDisabled = true;
+      settings.LineNumbersDisabled = true;
     }
   }
-
   if(useMonospaceFont)
   {
     if(useMonospaceFont == "true")
     {
-      useMonospaceFontGlobal = true;
+      settings.useMonospaceFontGlobal = true;
     }
   }
-
-
   if(userName)
   {
     // If the username is set as a parameter we should set a global value that we can call once we have initiated the pad.
-    globalUserName = userName;
+    settings.globalUserName = unescape(userName);
+  }
+  if(hideQRCode)
+  {
+    $('#qrcode').hide();
+  }
+  if(rtl)
+  {
+    if(rtl == "true")
+    {
+      settings.rtlIsTrue = true
+    }
   }
 }
 
@@ -155,16 +198,18 @@ function handshake()
   //find out in which subfolder we are
   var resource = loc.pathname.substr(1, loc.pathname.indexOf("/p/")) + "socket.io";
   //connect
-  socket = io.connect(url, {
-    resource: resource
+  socket = pad.socket = io.connect(url, {
+    resource: resource,
+    'max reconnection attempts': 3
   });
 
-  socket.once('connect', function()
+  function sendClientReady(isReconnect)
   {
     var padId = document.location.pathname.substring(document.location.pathname.lastIndexOf("/") + 1);
-    padId = unescape(padId); // unescape neccesary due to Safari and Opera interpretation of spaces
+    padId = decodeURIComponent(padId); // unescape neccesary due to Safari and Opera interpretation of spaces
 
-    document.title = document.title + " | " + padId;
+    if(!isReconnect)
+      document.title = document.title + " | " + padId.replace(/_+/g, ' ');
 
     var token = readCookie("token");
     if (token == null)
@@ -185,7 +230,43 @@ function handshake()
       "token": token,
       "protocolVersion": 2
     };
+    
+    //this is a reconnect, lets tell the server our revisionnumber
+    if(isReconnect == true)
+    {
+      msg.client_rev=pad.collabClient.getCurrentRevisionNumber();
+      msg.reconnect=true;
+    }
+    
     socket.json.send(msg);
+  };
+
+  var disconnectTimeout;
+
+  socket.once('connect', function () {
+    sendClientReady(false);
+  });
+  
+  socket.on('reconnect', function () {
+    //reconnect is before the timeout, lets stop the timeout
+    if(disconnectTimeout)
+    {
+      clearTimeout(disconnectTimeout);
+    }
+
+    pad.collabClient.setChannelState("CONNECTED");
+    sendClientReady(true);
+  });
+  
+  socket.on('disconnect', function () {
+    function disconnectEvent()
+    {
+      pad.collabClient.setChannelState("DISCONNECTED", "reconnect_timeout");
+    }
+    
+    pad.collabClient.setChannelState("RECONNECTING");
+    
+    disconnectTimeout = setTimeout(disconnectEvent, 10000);
   });
 
   var receivedClientVars = false;
@@ -204,13 +285,13 @@ function handshake()
       {
         $("#editorloadingbox").html("<b>You need a password to access this pad</b><br>" +
                                     "<input id='passwordinput' type='password' name='password'>"+
-                                    "<button type='button' onclick='savePassword()'>ok</button>");
+                                    "<button type='button' onclick=\"" + padutils.escapeHtml('require('+JSON.stringify(module.id)+").savePassword()") + "\">ok</button>");
       }
       else if(obj.accessStatus == "wrongPassword")
       {
         $("#editorloadingbox").html("<b>You're password was wrong</b><br>" +
                                     "<input id='passwordinput' type='password' name='password'>"+
-                                    "<button type='button' onclick='savePassword()'>ok</button>");
+                                    "<button type='button' onclick=\"" + padutils.escapeHtml('require('+JSON.stringify(module.id)+").savePassword()") + "\">ok</button>");
       }
     }
     
@@ -232,21 +313,33 @@ function handshake()
       initalized = true;
 
       // If the LineNumbersDisabled value is set to true then we need to hide the Line Numbers
-      if (LineNumbersDisabled == true)
+      if (settings.LineNumbersDisabled == true)
       {
         pad.changeViewOption('showLineNumbers', false);
       }
+
+      // If the noColors value is set to true then we need to hide the backround colors on the ace spans
+      if (settings.noColors == true)
+      {
+        pad.changeViewOption('noColors', true);
+      }
+      
+      if (settings.rtlIsTrue == true)
+      {
+        pad.changeViewOption('rtl', true);
+      }
+
       // If the Monospacefont value is set to true then change it to monospace.
-      if (useMonospaceFontGlobal == true)
+      if (settings.useMonospaceFontGlobal == true)
       {
         pad.changeViewOption('useMonospaceFont', true);
       }
       // if the globalUserName value is set we need to tell the server and the client about the new authorname
-      if (globalUserName !== false)
+      if (settings.globalUserName !== false)
       {
-        pad.notifyChangeName(globalUserName); // Notifies the server
-	pad.myUserInfo.name = globalUserName;
-        $('#myusernameedit').attr({"value":globalUserName}); // Updates the current users UI
+        pad.notifyChangeName(settings.globalUserName); // Notifies the server
+        pad.myUserInfo.name = settings.globalUserName;
+        $('#myusernameedit').attr({"value":settings.globalUserName}); // Updates the current users UI
       }
     }
     //This handles every Message after the clientVars
@@ -333,8 +426,7 @@ var pad = {
     pad.clientTimeOffset = new Date().getTime() - clientVars.serverTimestamp;
   
     //initialize the chat
-    chat.init();
-    pad.diagnosticInfo.uniqueId = padutils.uniqueId();
+    chat.init(this);
     pad.initTime = +(new Date());
     pad.padOptions = clientVars.initialOptions;
 
@@ -395,7 +487,7 @@ var pad = {
 
     pad.collabClient = getCollabClient(padeditor.ace, clientVars.collab_client_vars, pad.myUserInfo, {
       colorPalette: pad.getColorPalette()
-    });
+    }, pad);
     pad.collabClient.setOnUserJoin(pad.handleUserJoin);
     pad.collabClient.setOnUpdateUserInfo(pad.handleUserUpdate);
     pad.collabClient.setOnUserLeave(pad.handleUserLeave);
@@ -631,7 +723,22 @@ var pad = {
     else if (newState == "DISCONNECTED")
     {
       pad.diagnosticInfo.disconnectedMessage = message;
-      pad.diagnosticInfo.padInitTime = pad.initTime;
+      pad.diagnosticInfo.padId = pad.getPadId();
+      pad.diagnosticInfo.socket = {};
+      
+      //we filter non objects from the socket object and put them in the diagnosticInfo 
+      //this ensures we have no cyclic data - this allows us to stringify the data
+      for(var i in socket.socket)
+      {
+        var value = socket.socket[i];
+        var type = typeof value;
+        
+        if(type == "string" || type == "number")
+        {
+          pad.diagnosticInfo.socket[i] = value;
+        }
+      }
+    
       pad.asyncSendDiagnosticInfo();
       if (typeof window.ajlog == "string")
       {
@@ -703,7 +810,6 @@ var pad = {
   },
   asyncSendDiagnosticInfo: function()
   {
-    pad.diagnosticInfo.collabDiagnosticInfo = pad.collabClient.getDiagnosticInfo();
     window.setTimeout(function()
     {
       $.ajax(
@@ -711,7 +817,6 @@ var pad = {
         type: 'post',
         url: '/ep/pad/connection-diagnostic-info',
         data: {
-          padId: pad.getPadId(),
           diagnosticInfo: JSON.stringify(pad.diagnosticInfo)
         },
         success: function()
@@ -791,7 +896,7 @@ var pad = {
   },
   preloadImages: function()
   {
-    var images = []; // Removed as we now use CSS and JS for colorpicker
+    var images = ["../static/img/connectingbar.gif"];
 
     function loadNextImage()
     {
@@ -861,3 +966,14 @@ var alertBar = (function()
   };
   return self;
 }());
+
+exports.settings = settings;
+exports.createCookie = createCookie;
+exports.readCookie = readCookie;
+exports.randomString = randomString;
+exports.getParams = getParams;
+exports.getUrlVars = getUrlVars;
+exports.savePassword = savePassword;
+exports.handshake = handshake;
+exports.pad = pad;
+exports.alertBar = alertBar;

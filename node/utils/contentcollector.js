@@ -1,9 +1,3 @@
-/**
- * This code is mostly from the old Etherpad. Please help us to comment this code. 
- * This helps other people to understand this code better and helps them to improve it.
- * TL;DR COMMENTS ON THIS FILE ARE HIGHLY APPRECIATED
- */
-
 // THIS FILE IS ALSO AN APPJET MODULE: etherpad.collab.ace.contentcollector
 // %APPJET%: import("etherpad.collab.ace.easysync2.Changeset");
 // %APPJET%: import("etherpad.admin.plugins");
@@ -23,15 +17,9 @@
  * limitations under the License.
  */
 
-var _MAX_LIST_LEVEL = 8;
+var Changeset = require("../utils/Changeset");
 
-var Changeset = require('/easysync2').Changeset
-var plugins = undefined;
-try {
-  plugins = require('/plugins').plugins;
-} catch (e) {
-  // silence
-}
+var _MAX_LIST_LEVEL = 8;
 
 function sanitizeUnicode(s)
 {
@@ -49,7 +37,7 @@ function makeContentCollector(collectStyles, browser, apool, domInterface, class
   }
   else
   {
-    plugins_ = parent.parent.plugins;
+    plugins_ = {callHook: function () {}};
   }
 
   var dom = domInterface || {
@@ -701,5 +689,4 @@ function makeContentCollector(collectStyles, browser, apool, domInterface, class
   return cc;
 }
 
-exports.sanitizeUnicode = sanitizeUnicode;
 exports.makeContentCollector = makeContentCollector;
