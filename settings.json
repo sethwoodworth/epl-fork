@@ -4,6 +4,7 @@
   Please edit settings.json, not settings.json.template
 */
 {
+  "ip": "0.0.0.0",
   "port" : 9001,
   //The Type of the database. You can choose between sqlite and mysql
   "dbType" : "mongo",
