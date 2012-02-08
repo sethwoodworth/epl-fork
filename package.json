@@ -28,7 +28,7 @@
                       "require-kernel"      : "1.0.0",
                       "socket.io"           : "0.8.7",
                       "socket.io-client"    : "0.8.7",
-                      "ueberDB"             : "0.1.3",
+                      "ueberDB"             : "https://github.com/sethwoodworth/ueberDB.git",
                       "uglify-js"           : "1.1.1"
                      },
   "version"        : "1.0.0"
